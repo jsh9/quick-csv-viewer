@@ -18,18 +18,16 @@ It is hosted both on VS Code marketplace and Open VSX:
 
 ## 1. Features
 
-- Open `.csv` files in a readonly custom editor with a fast table view.
-- See useful file context, including file size, CSV shape, and last modified
-  time.
-- Search rendered CSV rows with VS Code's webview Find widget.
-- Keep large files responsive with configurable preview limits and indexed
-  virtual rendering.
-- Toggle wrapped cell contents and header-row mode from the info bar.
-- Keep the row-index column frozen while scrolling horizontally.
-- Autosize columns from the rendered preview data and drag column handles to
-  resize them for the current viewer session.
+- **Very fast file loading**: render the top X rows instead of the whole file.
+- **Readonly viewing**: prevent accidental changes to precious data files.
+- **Intuitive UI**: toggle cell wrapping, adjust column widths, and inspect CSV
+  files in a clean table view.
 
-## 2. Usage
+## 2. Screenshots
+
+![](./images/screenshots/quick-view.png)
+
+## 3. Usage
 
 Open any `.csv` file in VS Code and Quick CSV Viewer opens it with the custom
 viewer by default.
@@ -42,7 +40,7 @@ viewer contents. In indexed virtual views, Find searches the rows currently
 rendered by the viewport plus the viewer's small overscan buffer; scroll to
 search another range.
 
-## 3. Settings
+## 4. Settings
 
 - `quickCsvViewer.maxRows`: number of data rows to show. Default is `20`.
 - `quickCsvViewer.maxRows: 0`: index the full file and render visible rows on
@@ -58,7 +56,7 @@ search another range.
 - The info bar `Wrap cells` control updates
   `quickCsvViewer.wrapCellContents` globally.
 
-## 4. Header Row And Row Index
+## 5. Header Row And Row Index
 
 When `quickCsvViewer.firstRowIsHeader` is enabled, Quick CSV Viewer renders the
 first CSV record as the frozen table header and shows it with row index `0`.
@@ -74,21 +72,21 @@ indexed mode, that means the visible row range plus the header fields. Drag a
 column boundary in the header, or in the generated width-control row when header
 mode is off, to resize a column until the viewer is closed or reloaded.
 
-## 5. Indexed Mode
+## 6. Indexed Mode
 
 When `quickCsvViewer.maxRows` is `0` or a large positive preview count, Quick CSV
 Viewer does not send the whole file to the webview. It builds a byte-offset
 record index with progress, then the webview requests only the visible row range
 while scrolling. This keeps DOM size bounded for very large files.
 
-## 6. Raw Contents
+## 7. Raw Contents
 
 `View raw` opens the file in VS Code's default text editor. The extension's top
 info bar is not available there, but you can return to the viewer with
 `Open in Quick CSV Viewer` from the editor title, Explorer context menu, or
 command palette.
 
-## 7. Notes for Developers
+## 8. Notes for Developers
 
 ```sh
 npm install
