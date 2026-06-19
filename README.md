@@ -1,7 +1,20 @@
 # Quick CSV Viewer
 
-Quick CSV Viewer opens `.csv` files in a readonly, tabular VS Code custom editor
-designed to stay responsive with large comma-delimited files.
+Quick CSV Viewer is a VS Code extension that opens `.csv` files in a readonly,
+tabular custom editor designed to stay responsive with large comma-delimited
+files.
+
+You can also use it in IDEs that are based on VS Code (such as Cursor).
+
+To install it, simply search its name "Quick CSV Viewer" in the "Extensions"
+side panel of VS Code (or Cursor, etc.).
+
+It is hosted both on VS Code marketplace and Open VSX:
+
+- Visual Studio Marketplace:
+  <https://marketplace.visualstudio.com/items?itemName=jsh9.quick-csv-viewer>
+- Open VSX:
+  <https://open-vsx.org/extension/jsh9/quick-csv-viewer>
 
 ## 1. Features
 
