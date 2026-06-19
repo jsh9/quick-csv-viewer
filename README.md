@@ -13,6 +13,8 @@ designed to stay responsive with large comma-delimited files.
   virtual rendering.
 - Toggle wrapped cell contents and header-row mode from the info bar.
 - Keep the row-index column frozen while scrolling horizontally.
+- Autosize columns from the rendered preview data and drag column handles to
+  resize them for the current viewer session.
 
 ## 2. Usage
 
@@ -53,6 +55,11 @@ When `quickCsvViewer.firstRowIsHeader` is disabled, Quick CSV Viewer does not
 freeze a top header row. The first CSV record is rendered as row index `1`.
 
 The row-index column is always frozen on the left side of the table.
+
+Columns size themselves from the CSV rows already loaded into the viewer. In
+indexed mode, that means the visible row range plus the header fields. Drag a
+column boundary in the header, or in the generated width-control row when header
+mode is off, to resize a column until the viewer is closed or reloaded.
 
 ## 5. Indexed Mode
 

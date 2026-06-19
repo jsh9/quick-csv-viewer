@@ -12,5 +12,6 @@ All notable changes to Quick CSV Viewer are documented in this file.
 - Add a raw-file handoff button to open CSV files in VS Code's default editor.
 - Add table controls for wrapped cells, header-row mode, and a frozen row index
   column.
+- Add autosized table columns with drag handles for per-session manual resizing.
 - Generate multiple small and large CSV fixtures with quotes, Unicode, ragged
   rows, and multiline edge cases.

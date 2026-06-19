@@ -87,7 +87,7 @@ test('table header is sticky to freeze the top row', async () => {
 
   assert.match(
     source,
-    /\.table-header \{[\s\S]*?position: sticky;[\s\S]*?top: 0;[\s\S]*?z-index: 2;/
+    /\.table-header,\s*\.width-control-row \{[\s\S]*?position: sticky;[\s\S]*?top: 0;[\s\S]*?z-index: 2;/
   );
   assert.match(
     source,
@@ -111,6 +111,90 @@ test('table keeps a sticky row index column', async () => {
     source,
     /element\.append\(createIndexCell\(String\(row\.rowNumber\), 'rowheader'\)\);/
   );
+});
+
+test('webview autosizes data columns from loaded rows', async () => {
+  const source = await readExtensionSource();
+
+  assert.doesNotMatch(
+    source,
+    /repeat\(var\(--column-count\), minmax\(140px, 1fr\)\)/
+  );
+  assert.match(source, /const MAX_AUTO_COLUMN_WIDTH = 280;/);
+  assert.match(
+    source,
+    /function getAutoColumnWidths\(payload, columnCount\) \{[\s\S]*?const autosizeRows = payload\.preview \? payload\.preview\.rows : payload\.visibleRows \|\| \[\];/
+  );
+  assert.match(source, /text\.split\(\/\\\\r\\\\n\|\\\\r\|\\\\n\/\);/);
+  assert.match(
+    source,
+    /function applyColumnTemplate\(scroll, columnWidths\) \{[\s\S]*?--column-template/
+  );
+  assert.match(
+    source,
+    /const template = \[INDEX_COLUMN_WIDTH, \.\.\.roundedWidths\]/
+  );
+});
+
+test('webview keeps manual column widths per session and resets on reload or column-count change', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /let manualColumnWidths = new Map\(\);/);
+  assert.match(
+    source,
+    /function ensureColumnWidthState\(columnCount\) \{[\s\S]*?manualColumnWidths = new Map\(\);[\s\S]*?columnWidthCount = columnCount;/
+  );
+  assert.match(
+    source,
+    /function resetColumnWidths\(\) \{[\s\S]*?manualColumnWidths = new Map\(\);[\s\S]*?columnWidthCount = 0;/
+  );
+  assert.match(source, /resetColumnWidths\(\);[\s\S]*?renderLimited\(\);/);
+  assert.match(source, /resetColumnWidths\(\);[\s\S]*?renderFullViewer\(\);/);
+});
+
+test('webview renders drag handles and double-click reset for column resizing', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /handle\.className = 'column-resize-handle';/);
+  assert.match(source, /handle\.addEventListener\('pointerdown'/);
+  assert.match(source, /function handleColumnResize\(event\) \{/);
+  assert.match(
+    source,
+    /manualColumnWidths\.set\(activeColumnResize\.columnIndex, nextWidth\);/
+  );
+  assert.match(
+    source,
+    /handle\.addEventListener\('dblclick'[\s\S]*?resetManualColumnWidth\(columnIndex\);/
+  );
+});
+
+test('header-off mode renders a generated width-control row instead of a CSV header row', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /table\.append\(createWidthControlRow\(columnCount\), body\);/
+  );
+  assert.match(source, /row\.className = 'width-control-row';/);
+  assert.match(
+    source,
+    /for \(const \[columnIndex, label\] of normalizeHeaders\(\[\], columnCount\)\.entries\(\)\)/
+  );
+  assert.match(source, /row\.append\(createIndexCell\('', 'presentation'\)\);/);
+});
+
+test('virtual views refresh autosizing from visible rows while preserving measured heights', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /full\.visibleRows = rows;[\s\S]*?applyCurrentColumnTemplate\(\);/
+  );
+  assert.match(
+    source,
+    /function refreshVisibleRowsAfterColumnWidthChange\(\) \{[\s\S]*?resetVirtualMeasurements\(\);[\s\S]*?requestLimitedVisibleRows\(\);[\s\S]*?requestVisibleRows\(\);/
+  );
+  assert.match(source, /scheduleRenderedRowMeasurement\(\);/);
 });
 
 test('wrap cells setting is visual-only and persisted without reload', async () => {
