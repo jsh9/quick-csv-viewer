@@ -15,3 +15,5 @@ All notable changes to Quick CSV Viewer are documented in this file.
 - Add autosized table columns with drag handles for per-session manual resizing.
 - Generate multiple small and large CSV fixtures with quotes, Unicode, ragged
   rows, and multiline edge cases.
+- Fix cancelling a large CSV load so the viewer returns to the prior view or a
+  top-20-row preview.

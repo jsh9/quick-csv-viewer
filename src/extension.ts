@@ -7,6 +7,7 @@ import {
   CsvRecordIndex,
   CsvShape,
   CsvTableRow,
+  DEFAULT_MAX_ROWS,
   ViewerSettings,
   fetchCsvHeaders,
   fetchCsvRows,
@@ -185,7 +186,12 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
     let abortController: AbortController | undefined;
     let fullIndex: CsvRecordIndex | undefined;
     let currentSettings = getSettings();
+    let lastSuccessfulLoad: SuccessfulLoadState | undefined;
     let fileReloadTimer: ReturnType<typeof setTimeout> | undefined;
+    let suppressSettingsReload = false;
+    let clearSuppressSettingsReloadTimer:
+      | ReturnType<typeof setTimeout>
+      | undefined;
     let currentFileSnapshot: FileSnapshot | undefined;
     let exactShapeCache: ExactShapeCache | undefined;
     let exactShapeRequest: ExactShapeRequest | undefined;
@@ -194,6 +200,70 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
       abortController?.abort();
       abortController = undefined;
       fullIndex = undefined;
+    };
+
+    const runWithoutSettingsReload = async (
+      operation: () => Thenable<void> | Promise<void>
+    ): Promise<void> => {
+      suppressSettingsReload = true;
+      if (clearSuppressSettingsReloadTimer) {
+        clearTimeout(clearSuppressSettingsReloadTimer);
+        clearSuppressSettingsReloadTimer = undefined;
+      }
+
+      try {
+        await operation();
+      } finally {
+        clearSuppressSettingsReloadTimer = setTimeout(() => {
+          suppressSettingsReload = false;
+          clearSuppressSettingsReloadTimer = undefined;
+        }, 100);
+      }
+    };
+
+    const updateSettingsWithoutReload = async (
+      settings: Partial<Pick<ViewerSettings, 'maxRows' | 'firstRowIsHeader'>>
+    ): Promise<void> => {
+      const configuration = vscode.workspace.getConfiguration(SETTINGS_SECTION);
+      const updates: Array<() => Thenable<void>> = [];
+      const maxRows = settings.maxRows;
+      const firstRowIsHeader = settings.firstRowIsHeader;
+
+      if (typeof maxRows === 'number' && getSettings().maxRows !== maxRows) {
+        updates.push(() =>
+          configuration.update(
+            'maxRows',
+            maxRows,
+            vscode.ConfigurationTarget.Global
+          )
+        );
+      }
+
+      if (
+        typeof firstRowIsHeader === 'boolean' &&
+        getSettings().firstRowIsHeader !== firstRowIsHeader
+      ) {
+        updates.push(() =>
+          configuration.update(
+            'firstRowIsHeader',
+            firstRowIsHeader,
+            vscode.ConfigurationTarget.Global
+          )
+        );
+      }
+
+      if (updates.length === 0) {
+        currentSettings = {
+          ...currentSettings,
+          ...settings
+        };
+        return;
+      }
+
+      await runWithoutSettingsReload(async () => {
+        await Promise.all(updates.map((update) => update()));
+      });
+      currentSettings = getSettings();
     };
 
     const abortExactShape = (): void => {
@@ -309,6 +379,9 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
         currentSettings,
         (index) => {
           fullIndex = index;
+        },
+        (state) => {
+          lastSuccessfulLoad = state;
         },
         {
           noteFileSnapshot,
@@ -464,6 +537,33 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
         );
     };
 
+    const handleCancelLoad = async (): Promise<void> => {
+      const previousLoad =
+        lastSuccessfulLoad &&
+        currentFileSnapshot &&
+        isSameFileSnapshot(lastSuccessfulLoad.snapshot, currentFileSnapshot)
+          ? lastSuccessfulLoad
+          : undefined;
+      abortController?.abort();
+      abortController = undefined;
+      generation += 1;
+
+      if (previousLoad) {
+        currentSettings = previousLoad.settings;
+        fullIndex = previousLoad.fullIndex;
+        await webviewPanel.webview.postMessage({ type: 'restorePreviousView' });
+        await updateSettingsWithoutReload({
+          maxRows: previousLoad.settings.maxRows,
+          firstRowIsHeader: previousLoad.settings.firstRowIsHeader
+        });
+        return;
+      }
+
+      fullIndex = undefined;
+      await updateSettingsWithoutReload({ maxRows: DEFAULT_MAX_ROWS });
+      safeLoad();
+    };
+
     disposables.push(
       webviewPanel.webview.onDidReceiveMessage((message: WebviewMessage) => {
         if (message.type === 'ready') {
@@ -472,9 +572,13 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
           return;
         }
 
-        if (message.type === 'cancelIndex') {
-          abortController?.abort();
-          void webviewPanel.webview.postMessage({ type: 'fullIndexCancelled' });
+        if (message.type === 'cancelLoad') {
+          void handleCancelLoad().catch(async (error: unknown) => {
+            await webviewPanel.webview.postMessage({
+              type: 'settingsError',
+              message: formatError(error)
+            });
+          });
           return;
         }
 
@@ -539,6 +643,10 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
           event.affectsConfiguration(`${SETTINGS_SECTION}.maxRows`) ||
           event.affectsConfiguration(`${SETTINGS_SECTION}.firstRowIsHeader`)
         ) {
+          if (suppressSettingsReload) {
+            return;
+          }
+
           safeLoad();
           return;
         }
@@ -599,6 +707,9 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
       if (fileReloadTimer) {
         clearTimeout(fileReloadTimer);
       }
+      if (clearSuppressSettingsReloadTimer) {
+        clearTimeout(clearSuppressSettingsReloadTimer);
+      }
       for (const disposable of disposables) {
         disposable.dispose();
       }
@@ -616,6 +727,7 @@ async function postCsvData(
   signal: AbortSignal,
   settings: ViewerSettings,
   setFullIndex: (index: CsvRecordIndex) => void,
+  noteSuccessfulLoad: (state: SuccessfulLoadState) => void,
   exactShapes: ExactShapeCoordinator
 ): Promise<void> {
   if (uri.scheme !== 'file') {
@@ -705,6 +817,11 @@ async function postCsvData(
           headerFields: headers.headerFields
         }
       });
+      noteSuccessfulLoad({
+        settings: { ...settings },
+        snapshot,
+        fullIndex: index
+      });
 
       if (shouldStartExactShape(index)) {
         exactShapes.ensureExactShape(snapshot);
@@ -760,6 +877,10 @@ async function postCsvData(
         preview
       } satisfies CsvDataPayload
     });
+    noteSuccessfulLoad({
+      settings: { ...settings },
+      snapshot
+    });
 
     if (shouldStartExactShape(preview)) {
       exactShapes.ensureExactShape(snapshot);
@@ -770,7 +891,6 @@ async function postCsvData(
     }
 
     if (isAbortError(error)) {
-      await webview.postMessage({ type: 'fullIndexCancelled' });
       return;
     }
 
@@ -895,6 +1015,12 @@ interface ExactShapeCache {
 interface ExactShapeRequest {
   readonly snapshot: FileSnapshot;
   readonly controller: AbortController;
+}
+
+interface SuccessfulLoadState {
+  readonly settings: ViewerSettings;
+  readonly snapshot: FileSnapshot;
+  readonly fullIndex?: CsvRecordIndex;
 }
 
 interface ExactShapeCoordinator {
@@ -1389,6 +1515,7 @@ function getHtml(fileName: string): string {
     let viewState = 'loading';
     let data = null;
     let full = null;
+    let previousReadyView = null;
     let fullProgress = null;
     let previewLoad = null;
     let previewProgress = null;
@@ -1397,6 +1524,7 @@ function getHtml(fileName: string): string {
     let virtualRows = null;
     let latestRequestId = 0;
     let pendingRequestId = '';
+    let cancelLoadRequested = false;
     let animationFrame = 0;
     let columnResizeFrame = 0;
     let lastSubmittedMaxRows = '';
@@ -1454,6 +1582,7 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'loading') {
         viewState = 'loading';
+        cancelLoadRequested = false;
         data = null;
         full = null;
         previewLoad = null;
@@ -1466,8 +1595,13 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'data') {
         viewState = 'limited';
+        cancelLoadRequested = false;
         data = withShapeState(message.payload);
         full = null;
+        previousReadyView = {
+          type: 'limited',
+          payload: data
+        };
         previewLoad = null;
         previewProgress = null;
         resetVirtualMeasurements();
@@ -1554,6 +1688,7 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'previewLoadStart') {
         viewState = 'previewLoading';
+        cancelLoadRequested = false;
         data = null;
         full = null;
         previewLoad = message.payload;
@@ -1577,6 +1712,7 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'fullIndexStart') {
         viewState = 'fullIndexing';
+        cancelLoadRequested = false;
         data = null;
         full = message.payload;
         previewLoad = null;
@@ -1604,7 +1740,12 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'fullIndexReady') {
         viewState = 'fullReady';
+        cancelLoadRequested = false;
         full = withShapeState(message.payload);
+        previousReadyView = {
+          type: 'full',
+          payload: full
+        };
         fullProgress = null;
         resetVirtualMeasurements();
         resetColumnWidths();
@@ -1612,9 +1753,8 @@ function getHtml(fileName: string): string {
         return;
       }
 
-      if (message.type === 'fullIndexCancelled') {
-        viewState = 'cancelled';
-        renderCancelled();
+      if (message.type === 'restorePreviousView') {
+        restorePreviousView();
         return;
       }
 
@@ -1628,6 +1768,7 @@ function getHtml(fileName: string): string {
       }
 
       if (message.type === 'error') {
+        cancelLoadRequested = false;
         data = null;
         full = null;
         viewState = 'error';
@@ -1666,12 +1807,6 @@ function getHtml(fileName: string): string {
       content.replaceChildren(panel);
     }
 
-    function renderCancelled() {
-      setControlsDisabled(true);
-      previewStatus.textContent = 'Loading cancelled';
-      content.replaceChildren(status('Loading was cancelled. Change settings or reopen the file to start again.'));
-    }
-
     function renderPreviewLoading() {
       if (!previewLoad || !previewProgress) {
         renderLoading();
@@ -1685,14 +1820,16 @@ function getHtml(fileName: string): string {
       lastSubmittedMaxRows = rowsInput.value;
       renderSettingsControls(previewLoad);
       modified.textContent = previewLoad.lastModified;
-      previewStatus.textContent = 'Loading preview ' + formatPercent(previewProgress.percent);
+      previewStatus.textContent = cancelLoadRequested
+        ? 'Cancelling...'
+        : 'Loading preview ' + formatPercent(previewProgress.percent);
 
       const panel = document.createElement('section');
       panel.className = 'progress-panel';
 
       const title = document.createElement('p');
       title.className = 'status';
-      title.textContent = 'Loading preview...';
+      title.textContent = cancelLoadRequested ? 'Cancelling...' : 'Loading preview...';
 
       const track = document.createElement('div');
       track.className = 'progress-track';
@@ -1709,10 +1846,10 @@ function getHtml(fileName: string): string {
 
       const cancel = document.createElement('button');
       cancel.type = 'button';
+      cancel.disabled = cancelLoadRequested;
       cancel.textContent = 'Cancel';
-      cancel.addEventListener('click', () => {
-        vscode.postMessage({ type: 'cancelIndex' });
-      });
+      cancel.addEventListener('pointerdown', requestCancelLoad);
+      cancel.addEventListener('click', requestCancelLoad);
 
       panel.append(title, track, meta, cancel);
       content.replaceChildren(panel);
@@ -1809,14 +1946,16 @@ function getHtml(fileName: string): string {
       renderSettingsControls(full);
       modified.textContent = full.lastModified;
       const indexingLabel = full.maxRows === 0 ? 'Indexing full file' : 'Preparing indexed preview';
-      previewStatus.textContent = indexingLabel + ' ' + formatPercent(fullProgress.percent);
+      previewStatus.textContent = cancelLoadRequested
+        ? 'Cancelling...'
+        : indexingLabel + ' ' + formatPercent(fullProgress.percent);
 
       const panel = document.createElement('section');
       panel.className = 'progress-panel';
 
       const title = document.createElement('p');
       title.className = 'status';
-      title.textContent = indexingLabel + '...';
+      title.textContent = cancelLoadRequested ? 'Cancelling...' : indexingLabel + '...';
 
       const track = document.createElement('div');
       track.className = 'progress-track';
@@ -1835,13 +1974,57 @@ function getHtml(fileName: string): string {
 
       const cancel = document.createElement('button');
       cancel.type = 'button';
+      cancel.disabled = cancelLoadRequested;
       cancel.textContent = 'Cancel';
-      cancel.addEventListener('click', () => {
-        vscode.postMessage({ type: 'cancelIndex' });
-      });
+      cancel.addEventListener('pointerdown', requestCancelLoad);
+      cancel.addEventListener('click', requestCancelLoad);
 
       panel.append(title, track, meta, cancel);
       content.replaceChildren(panel);
+    }
+
+    function requestCancelLoad(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (cancelLoadRequested) {
+        return;
+      }
+
+      cancelLoadRequested = true;
+      previewStatus.textContent = 'Cancelling...';
+      for (const button of content.querySelectorAll('.progress-panel button')) {
+        button.disabled = true;
+      }
+      vscode.postMessage({ type: 'cancelLoad' });
+    }
+
+    function restorePreviousView() {
+      if (!previousReadyView) {
+        renderLoading();
+        return;
+      }
+
+      cancelLoadRequested = false;
+      previewLoad = null;
+      previewProgress = null;
+      fullProgress = null;
+      clearRowsError();
+      resetVirtualMeasurements();
+      resetColumnWidths();
+
+      if (previousReadyView.type === 'full') {
+        viewState = 'fullReady';
+        data = null;
+        full = previousReadyView.payload;
+        renderFullViewer();
+        return;
+      }
+
+      viewState = 'limited';
+      data = previousReadyView.payload;
+      full = null;
+      renderLimited();
     }
 
     function renderFullViewer() {

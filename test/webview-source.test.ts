@@ -290,6 +290,92 @@ test('shape progress is posted and rendered', async () => {
   );
 });
 
+test('load cancellation restores previous provider state or falls back to 20 rows', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /DEFAULT_MAX_ROWS/);
+  assert.match(
+    source,
+    /let lastSuccessfulLoad: SuccessfulLoadState \| undefined;/
+  );
+  assert.match(source, /let suppressSettingsReload = false;/);
+  assert.match(source, /const runWithoutSettingsReload = async/);
+  assert.match(
+    source,
+    /const handleCancelLoad = async \(\): Promise<void> => \{[\s\S]*isSameFileSnapshot\(lastSuccessfulLoad\.snapshot, currentFileSnapshot\)[\s\S]*abortController\?\.abort\(\);[\s\S]*generation \+= 1;/
+  );
+  assert.match(
+    source,
+    /fullIndex = previousLoad\.fullIndex;[\s\S]*type: 'restorePreviousView'/
+  );
+  assert.match(
+    source,
+    /updateSettingsWithoutReload\(\{[\s\S]*maxRows: previousLoad\.settings\.maxRows,[\s\S]*firstRowIsHeader: previousLoad\.settings\.firstRowIsHeader/
+  );
+  assert.match(
+    source,
+    /updateSettingsWithoutReload\(\{ maxRows: DEFAULT_MAX_ROWS \}\);[\s\S]*safeLoad\(\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'cancelLoad'\) \{[\s\S]*handleCancelLoad\(\)/
+  );
+  assert.match(
+    source,
+    /if \(suppressSettingsReload\) \{[\s\S]*return;[\s\S]*\}[\s\S]*safeLoad\(\);/
+  );
+  assert.match(
+    source,
+    /noteSuccessfulLoad\(\{[\s\S]*settings: \{ \.\.\.settings \},[\s\S]*snapshot,[\s\S]*fullIndex: index/
+  );
+  assert.doesNotMatch(
+    source,
+    /fullIndexCancelled|renderCancelled|Loading was cancelled/
+  );
+});
+
+test('webview cancel buttons request load cancellation and restore cached ready views', async () => {
+  const source = await readExtensionSource();
+  const cancelPosts =
+    source.match(/vscode\.postMessage\(\{ type: 'cancelLoad' \}\);/g) ?? [];
+
+  assert.equal(cancelPosts.length, 1);
+  assert.match(source, /let cancelLoadRequested = false;/);
+  assert.match(
+    source,
+    /cancel\.addEventListener\('pointerdown', requestCancelLoad\);[\s\S]*cancel\.addEventListener\('click', requestCancelLoad\);/
+  );
+  assert.match(
+    source,
+    /function requestCancelLoad\(event\) \{[\s\S]*event\.preventDefault\(\);[\s\S]*if \(cancelLoadRequested\) \{[\s\S]*return;[\s\S]*cancelLoadRequested = true;[\s\S]*previewStatus\.textContent = 'Cancelling\.\.\.';[\s\S]*vscode\.postMessage\(\{ type: 'cancelLoad' \}\);/
+  );
+  assert.match(
+    source,
+    /previewStatus\.textContent = cancelLoadRequested[\s\S]*\? 'Cancelling\.\.\.'[\s\S]*: 'Loading preview '/
+  );
+  assert.match(
+    source,
+    /previewStatus\.textContent = cancelLoadRequested[\s\S]*\? 'Cancelling\.\.\.'[\s\S]*: indexingLabel \+ ' '/
+  );
+  assert.match(source, /let previousReadyView = null;/);
+  assert.match(
+    source,
+    /if \(message\.type === 'data'\) \{[\s\S]*previousReadyView = \{[\s\S]*type: 'limited',[\s\S]*payload: data/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*previousReadyView = \{[\s\S]*type: 'full',[\s\S]*payload: full/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'restorePreviousView'\) \{[\s\S]*restorePreviousView\(\);/
+  );
+  assert.match(
+    source,
+    /function restorePreviousView\(\) \{[\s\S]*previousReadyView\.type === 'full'[\s\S]*renderFullViewer\(\);[\s\S]*viewState = 'limited';[\s\S]*renderLimited\(\);/
+  );
+});
+
 test('shape scans are cached across settings-only reloads', async () => {
   const source = await readExtensionSource();
   const configurationReload =
