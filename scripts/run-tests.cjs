@@ -38,12 +38,22 @@ if (testFiles.length === 0) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ['--test', ...testFiles], {
-  cwd: root,
-  stdio: 'inherit'
-});
+const result = spawnSync(
+  process.execPath,
+  ['--test', '--test-timeout=10000', ...testFiles],
+  {
+    cwd: root,
+    stdio: 'inherit',
+    timeout: 30_000
+  }
+);
 
 if (result.error) {
+  if (result.error.code === 'ETIMEDOUT') {
+    console.error('Test runner timed out after 30 seconds.');
+    process.exit(1);
+  }
+
   throw result.error;
 }
 

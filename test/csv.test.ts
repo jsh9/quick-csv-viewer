@@ -4,11 +4,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { after, before, test } from 'node:test';
 import {
+  CsvOperationCancelledError,
   DEFAULT_FIRST_ROW_IS_HEADER,
   DEFAULT_MAX_ROWS,
   DEFAULT_WRAP_CELL_CONTENTS,
   INDEXED_PREVIEW_ROW_THRESHOLD,
+  fetchCsvRecordRange,
+  fetchCsvHeaders,
   fetchCsvRows,
+  formatFileSize,
   getDataRowCount,
   getDisplayRowCount,
   getRecordLimit,
@@ -70,14 +74,23 @@ test('maxRows set to 0 can load all rows through the preview helper', async () =
     ].join('\n')
   );
 
-  const preview = await readCsvPreview(filePath, {
-    maxRows: 0,
-    firstRowIsHeader: true
-  });
+  const progress: Array<{ loadedRowCount: number; percent: number }> = [];
+  const preview = await readCsvPreview(
+    filePath,
+    {
+      maxRows: 0,
+      firstRowIsHeader: true
+    },
+    {
+      onProgress: (event) => progress.push(event)
+    }
+  );
 
   assert.equal(preview.loadedRowCount, 25);
   assert.equal(preview.rows.length, 25);
   assert.deepEqual(preview.rows[24]?.cells, ['24', 'v24']);
+  assert.equal(progress.at(-1)?.loadedRowCount, 25);
+  assert.equal(progress.at(-1)?.percent, 0);
 });
 
 test('header setting controls whether the first record is a data row', async () => {
@@ -125,6 +138,21 @@ test('preview reading reports progress for limited loads', async () => {
   assert.equal(progress.at(-1)?.percent, 100);
 });
 
+test('preview reading can be cancelled before file work starts', async () => {
+  const filePath = await writeFixture('cancel-preview.csv', 'a\n1');
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    readCsvPreview(
+      filePath,
+      { maxRows: 1, firstRowIsHeader: true },
+      { signal: controller.signal }
+    ),
+    (error: unknown) => isAbortError(error)
+  );
+});
+
 test('CSV parsing handles quoted commas, escaped quotes, and embedded newlines', () => {
   assert.deepEqual(
     parseCsvRecordsFromText(
@@ -149,6 +177,16 @@ test('CSV parsing handles CRLF, LF, CR, blank records, and trailing newlines', (
   assert.deepEqual(parseCsvRecordsFromText(''), []);
 });
 
+test('CSV parsing handles final carriage returns and unterminated quoted fields', () => {
+  assert.deepEqual(parseCsvRecordsFromText('a,b\r'), [['a', 'b']]);
+  assert.deepEqual(parseCsvRecordsFromText('"unterminated\nfield'), [
+    ['unterminated\nfield']
+  ]);
+  assert.deepEqual(parseCsvRecordsFromText('"quoted"x,next'), [
+    ['quotedx', 'next']
+  ]);
+});
+
 test('shape scan counts data rows based on header setting and tracks ragged columns', async () => {
   const filePath = await writeFixture('shape.csv', 'a,b\n1\n2,3,4');
 
@@ -164,14 +202,90 @@ test('shape scan counts data rows based on header setting and tracks ragged colu
   });
 });
 
+test('CSV shape and indexing handle CR-only line endings and escaped quotes', async () => {
+  const filePath = await writeFixture(
+    'cr-and-quotes.csv',
+    'name,note\r"Alice","hi ""there"""\rBob,last\r'
+  );
+  const index = await indexCsvFile(filePath, { chunkSize: 5 });
+
+  assert.equal(index.indexedRecordCount, 3);
+  assert.equal(index.isComplete, true);
+  assert.equal(index.maxColumnCount, 2);
+  assert.deepEqual(await scanCsvShape(filePath, { firstRowIsHeader: true }), {
+    rowCount: 2,
+    columnCount: 2,
+    recordCount: 3
+  });
+
+  const rows = await fetchCsvRows(filePath, index, {
+    start: 0,
+    count: 2,
+    firstRowIsHeader: true,
+    columnCount: 2
+  });
+  assert.deepEqual(
+    rows.rows.map((row) => row.cells),
+    [
+      ['Alice', 'hi "there"'],
+      ['Bob', 'last']
+    ]
+  );
+});
+
+test('CSV indexing handles CRLF records across chunk boundaries', async () => {
+  const filePath = await writeFixture('crlf-scan.csv', 'a,b\r\n1,2\r\n3,4');
+  const index = await indexCsvFile(filePath, { chunkSize: 4 });
+
+  assert.equal(index.indexedRecordCount, 3);
+  assert.equal(index.isComplete, true);
+  assert.deepEqual(index.recordOffsets, [0, 5, 10]);
+  assert.deepEqual(await scanCsvShape(filePath, { firstRowIsHeader: true }), {
+    rowCount: 2,
+    columnCount: 2,
+    recordCount: 3
+  });
+});
+
 test('empty files have a 0 x 0 shape and no preview rows', async () => {
   const filePath = await writeFixture('empty.csv', '');
+  const shapeProgress: Array<{
+    percent: number;
+    recordCount: number;
+    rowCount: number;
+    columnCount: number;
+  }> = [];
+  const indexProgress: Array<{
+    percent: number;
+    indexedRecordCount: number;
+    columnCount: number;
+  }> = [];
 
-  assert.deepEqual(await scanCsvShape(filePath, { firstRowIsHeader: true }), {
-    rowCount: 0,
-    columnCount: 0,
-    recordCount: 0
+  assert.deepEqual(
+    await scanCsvShape(filePath, {
+      firstRowIsHeader: true,
+      onProgress: (event) => shapeProgress.push(event)
+    }),
+    {
+      rowCount: 0,
+      columnCount: 0,
+      recordCount: 0
+    }
+  );
+  assert.equal(shapeProgress.at(-1)?.percent, 100);
+  assert.equal(shapeProgress.at(-1)?.recordCount, 0);
+  assert.equal(shapeProgress.at(-1)?.rowCount, 0);
+  assert.equal(shapeProgress.at(-1)?.columnCount, 0);
+
+  const index = await indexCsvFile(filePath, {
+    onProgress: (event) => indexProgress.push(event)
   });
+  assert.equal(index.indexedRecordCount, 0);
+  assert.equal(index.isComplete, true);
+  assert.deepEqual(index.recordOffsets, []);
+  assert.equal(indexProgress.at(-1)?.percent, 100);
+  assert.equal(indexProgress.at(-1)?.indexedRecordCount, 0);
+  assert.equal(indexProgress.at(-1)?.columnCount, 0);
 
   const preview = await readCsvPreview(filePath, {
     maxRows: 20,
@@ -190,6 +304,18 @@ test('normalizes generated column names for missing or blank headers', () => {
     'Column 4',
     'Column 5'
   ]);
+});
+
+test('file sizes are formatted across byte units and invalid inputs', () => {
+  assert.equal(formatFileSize(-1), '0 B');
+  assert.equal(formatFileSize(Number.NaN), '0 B');
+  assert.equal(formatFileSize(0), '0 B');
+  assert.equal(formatFileSize(1023), '1023 B');
+  assert.equal(formatFileSize(1024), '1.00 KB');
+  assert.equal(formatFileSize(10 * 1024), '10.0 KB');
+  assert.equal(formatFileSize(1024 ** 2), '1.00 MB');
+  assert.equal(formatFileSize(1024 ** 4), '1.00 TB');
+  assert.equal(formatFileSize(1024 ** 5), '1024.0 TB');
 });
 
 test('full-file indexing handles record offsets and quoted newlines', async () => {
@@ -216,6 +342,77 @@ test('full-file indexing handles record offsets and quoted newlines', async () =
   assert.deepEqual(rows.rows[1]?.cells, ['last', 'row']);
 });
 
+test('record range fetching handles headers, clamping, and malformed offsets', async () => {
+  const filePath = await writeFixture('record-ranges.csv', 'a,b\n1,2\n3,4');
+  const index = await indexCsvFile(filePath);
+
+  assert.deepEqual(
+    await fetchCsvHeaders(filePath, index, {
+      firstRowIsHeader: true,
+      columnCount: 3
+    }),
+    {
+      headerFields: ['a', 'b'],
+      headers: ['a', 'b', 'Column 3']
+    }
+  );
+  assert.deepEqual(
+    await fetchCsvHeaders(filePath, index, {
+      firstRowIsHeader: false,
+      columnCount: 2
+    }),
+    {
+      headerFields: [],
+      headers: ['Column 1', 'Column 2']
+    }
+  );
+  assert.deepEqual(await fetchCsvRecordRange(filePath, index, -2, 2), [
+    ['a', 'b'],
+    ['1', '2']
+  ]);
+  assert.deepEqual(await fetchCsvRecordRange(filePath, index, 1.8, 1.2), [
+    ['1', '2']
+  ]);
+  assert.deepEqual(
+    await fetchCsvRecordRange(
+      filePath,
+      index,
+      Number.NaN,
+      Number.POSITIVE_INFINITY
+    ),
+    []
+  );
+
+  const missingOffsetIndex = {
+    ...index,
+    recordOffsets: []
+  };
+  assert.deepEqual(
+    await fetchCsvRecordRange(filePath, missingOffsetIndex, 0, 1),
+    []
+  );
+  assert.deepEqual(
+    await fetchCsvHeaders(filePath, missingOffsetIndex, {
+      firstRowIsHeader: true,
+      columnCount: 2
+    }),
+    {
+      headerFields: [],
+      headers: ['Column 1', 'Column 2']
+    }
+  );
+
+  const reversedOffsetIndex = {
+    ...index,
+    recordOffsets: [4],
+    indexedEndOffset: 2
+  };
+  assert.deepEqual(
+    await fetchCsvRecordRange(filePath, reversedOffsetIndex, 0, 1),
+    []
+  );
+});
+
 test('prefix indexing stops after the requested preview records', async () => {
   const filePath = await writeFixture(
     'prefix-limit.csv',
@@ -240,6 +437,38 @@ test('prefix indexing stops after the requested preview records', async () => {
       ['2', 'b']
     ]
   );
+});
+
+test('record limit zero indexes no records without reading rows', async () => {
+  const filePath = await writeFixture('zero-record-limit.csv', 'a\n1\n2');
+  const progress: Array<{ indexedRecordCount: number; percent: number }> = [];
+  const index = await indexCsvFile(filePath, {
+    recordLimit: 0,
+    progressIntervalMs: 0,
+    onProgress: (event) => progress.push(event)
+  });
+
+  assert.equal(index.indexedRecordCount, 0);
+  assert.equal(index.indexedEndOffset, 0);
+  assert.equal(index.isComplete, false);
+  assert.equal(index.maxColumnCount, 0);
+  assert.deepEqual(index.recordOffsets, []);
+  assert.equal(progress.at(-1)?.indexedRecordCount, 0);
+  assert.equal(progress.at(-1)?.percent, 0);
+});
+
+test('record limits stop after CR-only records without consuming the next record', async () => {
+  const filePath = await writeFixture('cr-record-limit.csv', 'a\rb\rc');
+  const index = await indexCsvFile(filePath, {
+    chunkSize: 16,
+    recordLimit: 1
+  });
+
+  assert.equal(index.indexedRecordCount, 1);
+  assert.equal(index.indexedEndOffset, 2);
+  assert.equal(index.isComplete, false);
+  assert.deepEqual(index.recordOffsets, [0]);
+  assert.deepEqual(await fetchCsvRecordRange(filePath, index, 0, 1), [['a']]);
 });
 
 test('prefix indexing is complete when the limit exceeds file length', async () => {
@@ -273,6 +502,34 @@ test('range fetching clamps out-of-range requests', async () => {
   assert.equal(rows.start, 2);
   assert.deepEqual(rows.rows, []);
   assert.equal(rows.indexedDataRowCount, 2);
+});
+
+test('row fetching clamps negative, fractional, and non-finite ranges', async () => {
+  const filePath = await writeFixture('row-range-values.csv', 'a,b\n1,2\n3');
+  const index = await indexCsvFile(filePath);
+
+  const negative = await fetchCsvRows(filePath, index, {
+    start: -5,
+    count: 1.9,
+    firstRowIsHeader: true,
+    columnCount: 3
+  });
+  assert.equal(negative.start, 0);
+  assert.deepEqual(negative.rows, [
+    {
+      rowNumber: 1,
+      cells: ['1', '2', '']
+    }
+  ]);
+
+  const nonFinite = await fetchCsvRows(filePath, index, {
+    start: Number.NaN,
+    count: Number.POSITIVE_INFINITY,
+    firstRowIsHeader: true,
+    columnCount: 2
+  });
+  assert.equal(nonFinite.start, 0);
+  assert.deepEqual(nonFinite.rows, []);
 });
 
 test('shape scanning reports byte and shape progress', async () => {
@@ -365,6 +622,74 @@ test('indexing and shape scanning can be cancelled', async () => {
   );
 });
 
+test('missing files reject from preview, index, shape, and row fetch paths', async () => {
+  const missingPath = path.join(tempDir, 'missing.csv');
+  const index = {
+    fileSize: 1,
+    recordOffsets: [0],
+    indexedRecordCount: 1,
+    indexedEndOffset: 1,
+    isComplete: true,
+    maxColumnCount: 1
+  };
+
+  await assert.rejects(
+    readCsvPreview(missingPath, { maxRows: 1, firstRowIsHeader: true }),
+    /ENOENT/
+  );
+  await assert.rejects(indexCsvFile(missingPath), /ENOENT/);
+  await assert.rejects(
+    scanCsvShape(missingPath, { firstRowIsHeader: true }),
+    /ENOENT/
+  );
+  await assert.rejects(fetchCsvRecordRange(missingPath, index, 0, 1), /ENOENT/);
+});
+
+test('progress callbacks can be omitted or throttled while final events are forced', async () => {
+  const filePath = await writeFixture(
+    'throttled-progress.csv',
+    'a,b\n1,2\n3,4'
+  );
+  const previewProgress: Array<{ loadedRowCount: number; percent: number }> =
+    [];
+  const shapeProgress: Array<{ bytesRead: number; percent: number }> = [];
+  const indexProgress: Array<{ bytesRead: number; percent: number }> = [];
+
+  await readCsvPreview(filePath, { maxRows: 2, firstRowIsHeader: true });
+  await scanCsvShape(filePath, { firstRowIsHeader: true });
+  await indexCsvFile(filePath);
+
+  await readCsvPreview(
+    filePath,
+    { maxRows: 2, firstRowIsHeader: true },
+    {
+      progressIntervalMs: 60_000,
+      onProgress: (event) => previewProgress.push(event)
+    }
+  );
+  await scanCsvShape(filePath, {
+    firstRowIsHeader: true,
+    chunkSize: 2,
+    progressIntervalMs: 60_000,
+    onProgress: (event) => shapeProgress.push(event)
+  });
+  await indexCsvFile(filePath, {
+    chunkSize: 2,
+    progressIntervalMs: 60_000,
+    onProgress: (event) => indexProgress.push(event)
+  });
+
+  assert.deepEqual(
+    previewProgress.map((event) => event.loadedRowCount),
+    [0, 2]
+  );
+  assert.equal(previewProgress.at(-1)?.percent, 100);
+  assert.equal(shapeProgress[0]?.bytesRead, 0);
+  assert.equal(shapeProgress.at(-1)?.percent, 100);
+  assert.equal(indexProgress[0]?.bytesRead, 0);
+  assert.equal(indexProgress.at(-1)?.percent, 100);
+});
+
 test('settings validation and row-count helpers follow viewer semantics', () => {
   assert.deepEqual(
     normalizeViewerSettings({
@@ -408,6 +733,15 @@ test('settings validation and row-count helpers follow viewer semantics', () => 
     false
   );
   assert.equal(shouldUseIndexedPreview(INDEXED_PREVIEW_ROW_THRESHOLD), true);
+  assert.equal(isAbortError(new CsvOperationCancelledError()), true);
+  assert.equal(
+    isAbortError(
+      Object.assign(new Error('native abort'), { name: 'AbortError' })
+    ),
+    true
+  );
+  assert.equal(isAbortError(new Error('not abort')), false);
+  assert.equal(isAbortError('AbortError'), false);
 });
 
 test('prefix indexing rejects invalid record limits', async () => {
