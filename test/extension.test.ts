@@ -1214,6 +1214,15 @@ test('custom editor provider suppresses duplicate exact-shape scans for unchange
       }
     },
     {
+      nodeFsOverrides: {
+        watch: () => {
+          const watcher = {
+            on: () => watcher,
+            close: () => undefined
+          };
+          return watcher;
+        }
+      },
       csvOverrides: {
         scanCsvShape: (
           _filePath: string,
