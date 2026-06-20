@@ -5,11 +5,21 @@ import { test } from 'node:test';
 
 test('package main points to the compiled extension entrypoint', async () => {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const iconPath = path.join(process.cwd(), 'images', 'icon.png');
   const packageJson = JSON.parse(
     await fs.readFile(packageJsonPath, 'utf8')
   ) as {
+    readonly icon?: unknown;
     readonly main?: unknown;
   };
+
+  assert.equal(packageJson.icon, 'images/icon.png');
+  const icon = await fs.readFile(iconPath);
+  assert.deepEqual(
+    [...icon.subarray(0, 8)],
+    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  );
+  assert.equal(icon[25], 6);
 
   const main = packageJson.main;
   assert.equal(typeof main, 'string');
