@@ -18,16 +18,22 @@ import {
   indexCsvFile,
   INDEXED_PREVIEW_ROW_THRESHOLD,
   isAbortError,
+  normalizeViewerSettings,
   readCsvPreview,
   scanCsvShape,
   shapeFromRecordScan,
   shouldUseIndexedPreview
 } from './csv';
-import { openCsvViewer, openSampleCsvFiles } from './extension/commands';
-import { SETTINGS_SECTION, VIEW_TYPE } from './extension/constants';
-import { getSettings } from './extension/settings';
-import { clampMessageInteger, formatError } from './extension/utils';
 
+const VIEW_TYPE = 'quickCsvViewer.viewer';
+const SETTINGS_SECTION = 'quickCsvViewer';
+const SAMPLE_CSV_PATHS = [
+  'sample-data/sample-data.csv',
+  'sample-data/small-ragged-unicode.csv',
+  'sample-data/large-placeholder.csv',
+  'sample-data/large-unicode-ragged.csv',
+  'sample-data/large-long-cells.csv'
+];
 const FILE_RELOAD_DEBOUNCE_MS = 150;
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -35,7 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'quickCsvViewer.openCurrentFile',
       (resource?: vscode.Uri) => {
-        void openCsvViewer(vscode, resource).catch((error: unknown) => {
+        void openCsvViewer(resource).catch((error: unknown) => {
           void vscode.window.showErrorMessage(
             `Quick CSV Viewer failed to open the file: ${formatError(error)}`
           );
@@ -43,13 +49,11 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
     vscode.commands.registerCommand('quickCsvViewer.openSampleFiles', () => {
-      void openSampleCsvFiles(vscode, context.extensionUri).catch(
-        (error: unknown) => {
-          void vscode.window.showErrorMessage(
-            `Quick CSV Viewer failed to open sample files: ${formatError(error)}`
-          );
-        }
-      );
+      void openSampleCsvFiles(context.extensionUri).catch((error: unknown) => {
+        void vscode.window.showErrorMessage(
+          `Quick CSV Viewer failed to open sample files: ${formatError(error)}`
+        );
+      });
     }),
     vscode.window.registerCustomEditorProvider(
       VIEW_TYPE,
@@ -67,6 +71,89 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // Nothing to dispose; VS Code owns provider subscriptions registered on activation.
+}
+
+async function openCsvViewer(resource?: vscode.Uri): Promise<void> {
+  const uri = resource ?? getActiveEditorUri();
+
+  if (!uri) {
+    void vscode.window.showWarningMessage(
+      'Open a CSV file before running Quick CSV Viewer.'
+    );
+    return;
+  }
+
+  if (!isCsvFile(uri)) {
+    void vscode.window.showWarningMessage(
+      'Quick CSV Viewer can only open .csv files.'
+    );
+    return;
+  }
+
+  await vscode.commands.executeCommand(
+    'vscode.openWith',
+    uri,
+    VIEW_TYPE,
+    vscode.ViewColumn.Active
+  );
+}
+
+async function openSampleCsvFiles(extensionUri: vscode.Uri): Promise<void> {
+  let openedCount = 0;
+
+  for (const [index, relativePath] of SAMPLE_CSV_PATHS.entries()) {
+    const uri = vscode.Uri.joinPath(extensionUri, ...relativePath.split('/'));
+    try {
+      await fs.access(uri.fsPath);
+    } catch {
+      continue;
+    }
+
+    const column =
+      openedCount === 0 ? vscode.ViewColumn.One : vscode.ViewColumn.Beside;
+    await vscode.commands.executeCommand(
+      'vscode.openWith',
+      uri,
+      VIEW_TYPE,
+      column
+    );
+    openedCount += 1;
+  }
+
+  if (openedCount === 0) {
+    void vscode.window.showWarningMessage(
+      'No sample CSV files found. Run python3 sample-data/generate_large_csv.py first.'
+    );
+  }
+}
+
+function getActiveEditorUri(): vscode.Uri | undefined {
+  const activeTextEditorUri = vscode.window.activeTextEditor?.document.uri;
+
+  if (activeTextEditorUri) {
+    return activeTextEditorUri;
+  }
+
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+
+  if (
+    input instanceof vscode.TabInputText ||
+    input instanceof vscode.TabInputCustom
+  ) {
+    return input.uri;
+  }
+
+  if (input instanceof vscode.TabInputTextDiff) {
+    return input.modified;
+  }
+
+  return undefined;
+}
+
+function isCsvFile(uri: vscode.Uri): boolean {
+  return (
+    uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.csv'
+  );
 }
 
 class CsvDocument implements vscode.CustomDocument {
@@ -98,7 +185,7 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
     let webviewReady = false;
     let abortController: AbortController | undefined;
     let fullIndex: CsvRecordIndex | undefined;
-    let currentSettings = getSettings(vscode.workspace);
+    let currentSettings = getSettings();
     let lastSuccessfulLoad: SuccessfulLoadState | undefined;
     let fileReloadTimer: ReturnType<typeof setTimeout> | undefined;
     let suppressSettingsReload = false;
@@ -142,10 +229,7 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
       const maxRows = settings.maxRows;
       const firstRowIsHeader = settings.firstRowIsHeader;
 
-      if (
-        typeof maxRows === 'number' &&
-        getSettings(vscode.workspace).maxRows !== maxRows
-      ) {
+      if (typeof maxRows === 'number' && getSettings().maxRows !== maxRows) {
         updates.push(() =>
           configuration.update(
             'maxRows',
@@ -157,7 +241,7 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
 
       if (
         typeof firstRowIsHeader === 'boolean' &&
-        getSettings(vscode.workspace).firstRowIsHeader !== firstRowIsHeader
+        getSettings().firstRowIsHeader !== firstRowIsHeader
       ) {
         updates.push(() =>
           configuration.update(
@@ -179,7 +263,7 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
       await runWithoutSettingsReload(async () => {
         await Promise.all(updates.map((update) => update()));
       });
-      currentSettings = getSettings(vscode.workspace);
+      currentSettings = getSettings();
     };
 
     const abortExactShape = (): void => {
@@ -284,7 +368,7 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
       const controller = new AbortController();
       abortController = controller;
       fullIndex = undefined;
-      currentSettings = getSettings(vscode.workspace);
+      currentSettings = getSettings();
 
       await postCsvData(
         document.uri,
@@ -570,7 +654,7 @@ class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<CsvDocume
         if (
           event.affectsConfiguration(`${SETTINGS_SECTION}.wrapCellContents`)
         ) {
-          currentSettings = getSettings(vscode.workspace);
+          currentSettings = getSettings();
           void webviewPanel.webview.postMessage({
             type: 'wrapCellContents',
             value: currentSettings.wrapCellContents
@@ -885,6 +969,27 @@ function startExactShapeScan(
     });
 }
 
+function getSettings(): ViewerSettings {
+  const configuration = vscode.workspace.getConfiguration(SETTINGS_SECTION);
+  return normalizeViewerSettings({
+    maxRows: configuration.get('maxRows'),
+    firstRowIsHeader: configuration.get('firstRowIsHeader'),
+    wrapCellContents: configuration.get('wrapCellContents')
+  });
+}
+
+function clampMessageInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return minimum;
+  }
+
+  return Math.max(minimum, Math.min(maximum, Math.trunc(value)));
+}
+
 interface CsvDataPayload {
   readonly fileName: string;
   readonly fileSize: string;
@@ -947,6 +1052,10 @@ function getFileSnapshot(
 
 function isSameFileSnapshot(left: FileSnapshot, right: FileSnapshot): boolean {
   return left.size === right.size && left.mtimeMs === right.mtimeMs;
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function getHtml(fileName: string): string {
