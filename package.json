@@ -2,7 +2,7 @@
   "name": "quick-csv-viewer",
   "displayName": "Quick CSV Viewer",
   "description": "View and preview large CSV files in a readonly, fast VS Code custom editor.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "jsh9",
   "license": "MIT",
   "icon": "images/icon.png",
