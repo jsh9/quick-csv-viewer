@@ -2,6 +2,17 @@
 
 All notable changes to Quick CSV Viewer are documented in this file.
 
+## 0.0.2
+
+- Refactor CSV parsing, indexing, preview, and formatting logic into focused
+  modules.
+- Refactor extension activation, command handling, provider loading, settings,
+  snapshots, and webview source into smaller files.
+- Split CSV and extension test suites into focused files with shared support
+  helpers.
+- Add clean test builds and enforce 100% runtime coverage for included source
+  files.
+
 ## 0.0.1
 
 - Initial release of Quick CSV Viewer.

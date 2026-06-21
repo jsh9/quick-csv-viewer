@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 
 # Local extension fixtures
 sample-data/*.csv
+
+*.vsix

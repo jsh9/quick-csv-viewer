@@ -4,7 +4,32 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 
 async function readExtensionSource(): Promise<string> {
-  return fs.readFile(path.join(process.cwd(), 'src', 'extension.ts'), 'utf8');
+  const sourcePaths = [
+    ['src', 'extension.ts'],
+    ['src', 'extension', 'commands.ts'],
+    ['src', 'extension', 'constants.ts'],
+    ['src', 'extension', 'loader.ts'],
+    ['src', 'extension', 'provider.ts'],
+    ['src', 'extension', 'settings.ts'],
+    ['src', 'extension', 'snapshots.ts'],
+    ['src', 'extension', 'types.ts'],
+    ['src', 'extension', 'utils.ts'],
+    ['src', 'extension', 'webview.ts'],
+    ['src', 'extension', 'webview', 'styles.ts'],
+    ['src', 'extension', 'webview', 'security.ts'],
+    ['src', 'extension', 'webview', 'client', 'bootstrap.ts'],
+    ['src', 'extension', 'webview', 'client', 'rendering.ts'],
+    ['src', 'extension', 'webview', 'client', 'table.ts'],
+    ['src', 'extension', 'webview', 'client', 'virtualization.ts'],
+    ['src', 'extension', 'webview', 'client', 'controls.ts'],
+    ['src', 'extension', 'webview', 'client', 'script.ts']
+  ];
+  const sources = await Promise.all(
+    sourcePaths.map((segments) =>
+      fs.readFile(path.join(process.cwd(), ...segments), 'utf8')
+    )
+  );
+  return sources.join('\n');
 }
 
 test('custom editor enables the VS Code find widget for webview search', async () => {
@@ -413,7 +438,7 @@ test('file snapshot changes invalidate exact shapes', async () => {
   );
   assert.match(
     source,
-    /function isSameFileSnapshot\(left: FileSnapshot, right: FileSnapshot\): boolean \{[\s\S]*?left\.size === right\.size && left\.mtimeMs === right\.mtimeMs/
+    /function isSameFileSnapshot\([\s\S]*?left: FileSnapshot,[\s\S]*?right: FileSnapshot[\s\S]*?\): boolean \{[\s\S]*?left\.size === right\.size && left\.mtimeMs === right\.mtimeMs/
   );
   assert.match(
     source,

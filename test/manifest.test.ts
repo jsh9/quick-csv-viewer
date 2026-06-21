@@ -5,11 +5,21 @@ import { test } from 'node:test';
 
 test('package main points to the compiled extension entrypoint', async () => {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const iconPath = path.join(process.cwd(), 'images', 'icon.png');
   const packageJson = JSON.parse(
     await fs.readFile(packageJsonPath, 'utf8')
   ) as {
+    readonly icon?: unknown;
     readonly main?: unknown;
   };
+
+  assert.equal(packageJson.icon, 'images/icon.png');
+  const icon = await fs.readFile(iconPath);
+  assert.deepEqual(
+    [...icon.subarray(0, 8)],
+    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  );
+  assert.equal(icon[25], 6);
 
   const main = packageJson.main;
   assert.equal(typeof main, 'string');
@@ -116,9 +126,15 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
     readonly devDependencies?: Record<string, unknown>;
   };
 
+  assert.equal(packageJson.scripts?.['clean'], 'node scripts/clean.cjs');
+  assert.equal(packageJson.scripts?.['compile'], 'tsc -p ./');
+  assert.equal(
+    packageJson.scripts?.['compile:clean'],
+    'npm run clean && npm run compile'
+  );
   assert.equal(
     packageJson.scripts?.['test'],
-    'npm run format:check && npm run compile && npm run test:coverage'
+    'npm run format:check && npm run compile:clean && npm run test:coverage'
   );
   assert.equal(
     packageJson.scripts?.['test:unit'],
@@ -126,11 +142,11 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   );
   assert.equal(
     packageJson.scripts?.['test:coverage'],
-    "c8 --all --src out/src --include 'out/src/**/*.js' --check-coverage --lines 95 --branches 95 --functions 95 npm run test:unit"
+    "node scripts/prepare-private-coverage.cjs && c8 --all --src out/src --include 'out/src/**/*.js' --exclude 'out/src/**/types.js' --check-coverage --statements 100 --lines 100 --branches 100 --functions 100 npm run test:unit"
   );
   assert.equal(
     packageJson.scripts?.['test:vscode'],
-    'npm run compile && vscode-test'
+    'npm run compile:clean && vscode-test'
   );
   assert.equal(
     packageJson.scripts?.['format'],
