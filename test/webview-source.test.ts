@@ -4,7 +4,14 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 
 async function readExtensionSource(): Promise<string> {
-  return fs.readFile(path.join(process.cwd(), 'src', 'extension.ts'), 'utf8');
+  const sources = await Promise.all([
+    fs.readFile(path.join(process.cwd(), 'src', 'extension.ts'), 'utf8'),
+    fs.readFile(
+      path.join(process.cwd(), 'src', 'extension', 'webview.ts'),
+      'utf8'
+    )
+  ]);
+  return sources.join('\n');
 }
 
 test('custom editor enables the VS Code find widget for webview search', async () => {
