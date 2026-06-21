@@ -1286,9 +1286,25 @@ async function withMockedExtension(
 ): Promise<void> {
   const vscode = createVscodeMock();
   const extensionPath = path.join(process.cwd(), 'out', 'src', 'extension.js');
+  const extensionModuleRoot = path.join(
+    process.cwd(),
+    'out',
+    'src',
+    'extension'
+  );
   const csvPath = path.join(process.cwd(), 'out', 'src', 'csv.js');
   const csvOverrides = overrides.csvOverrides ?? {};
   const nodeFsOverrides = overrides.nodeFsOverrides ?? {};
+  const clearExtensionModuleCache = (): void => {
+    for (const cachePath of Object.keys(require.cache)) {
+      if (
+        cachePath === extensionPath ||
+        cachePath.startsWith(extensionModuleRoot + path.sep)
+      ) {
+        delete require.cache[cachePath];
+      }
+    }
+  };
   const realCsv =
     Object.keys(csvOverrides).length > 0
       ? (require(csvPath) as Record<string, unknown>)
@@ -1307,7 +1323,10 @@ async function withMockedExtension(
       return vscode;
     }
 
-    if (request === './csv' && realCsv) {
+    if (
+      ['./csv', '../csv', '../../csv', '../../../csv'].includes(request) &&
+      realCsv
+    ) {
       return {
         ...realCsv,
         ...csvOverrides
@@ -1323,13 +1342,13 @@ async function withMockedExtension(
 
     return originalLoad.call(this, request, parent, isMain);
   };
-  delete require.cache[require.resolve(extensionPath)];
+  clearExtensionModuleCache();
 
   try {
     const extension = require(extensionPath) as ExtensionModule;
     await run({ extension, vscode });
   } finally {
-    delete require.cache[require.resolve(extensionPath)];
+    clearExtensionModuleCache();
     moduleLoader._load = originalLoad;
   }
 }

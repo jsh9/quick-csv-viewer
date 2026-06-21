@@ -6,6 +6,14 @@ import { test } from 'node:test';
 async function readExtensionSource(): Promise<string> {
   const sourcePaths = [
     ['src', 'extension.ts'],
+    ['src', 'extension', 'commands.ts'],
+    ['src', 'extension', 'constants.ts'],
+    ['src', 'extension', 'loader.ts'],
+    ['src', 'extension', 'provider.ts'],
+    ['src', 'extension', 'settings.ts'],
+    ['src', 'extension', 'snapshots.ts'],
+    ['src', 'extension', 'types.ts'],
+    ['src', 'extension', 'utils.ts'],
     ['src', 'extension', 'webview.ts'],
     ['src', 'extension', 'webview', 'styles.ts'],
     ['src', 'extension', 'webview', 'security.ts'],
@@ -430,7 +438,7 @@ test('file snapshot changes invalidate exact shapes', async () => {
   );
   assert.match(
     source,
-    /function isSameFileSnapshot\(left: FileSnapshot, right: FileSnapshot\): boolean \{[\s\S]*?left\.size === right\.size && left\.mtimeMs === right\.mtimeMs/
+    /function isSameFileSnapshot\([\s\S]*?left: FileSnapshot,[\s\S]*?right: FileSnapshot[\s\S]*?\): boolean \{[\s\S]*?left\.size === right\.size && left\.mtimeMs === right\.mtimeMs/
   );
   assert.match(
     source,
