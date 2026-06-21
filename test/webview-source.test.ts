@@ -4,13 +4,23 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 
 async function readExtensionSource(): Promise<string> {
-  const sources = await Promise.all([
-    fs.readFile(path.join(process.cwd(), 'src', 'extension.ts'), 'utf8'),
-    fs.readFile(
-      path.join(process.cwd(), 'src', 'extension', 'webview.ts'),
-      'utf8'
+  const sourcePaths = [
+    ['src', 'extension.ts'],
+    ['src', 'extension', 'webview.ts'],
+    ['src', 'extension', 'webview', 'styles.ts'],
+    ['src', 'extension', 'webview', 'security.ts'],
+    ['src', 'extension', 'webview', 'client', 'bootstrap.ts'],
+    ['src', 'extension', 'webview', 'client', 'rendering.ts'],
+    ['src', 'extension', 'webview', 'client', 'table.ts'],
+    ['src', 'extension', 'webview', 'client', 'virtualization.ts'],
+    ['src', 'extension', 'webview', 'client', 'controls.ts'],
+    ['src', 'extension', 'webview', 'client', 'script.ts']
+  ];
+  const sources = await Promise.all(
+    sourcePaths.map((segments) =>
+      fs.readFile(path.join(process.cwd(), ...segments), 'utf8')
     )
-  ]);
+  );
   return sources.join('\n');
 }
 
