@@ -126,9 +126,15 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
     readonly devDependencies?: Record<string, unknown>;
   };
 
+  assert.equal(packageJson.scripts?.['clean'], 'node scripts/clean.cjs');
+  assert.equal(packageJson.scripts?.['compile'], 'tsc -p ./');
+  assert.equal(
+    packageJson.scripts?.['compile:clean'],
+    'npm run clean && npm run compile'
+  );
   assert.equal(
     packageJson.scripts?.['test'],
-    'npm run format:check && npm run compile && npm run test:coverage'
+    'npm run format:check && npm run compile:clean && npm run test:coverage'
   );
   assert.equal(
     packageJson.scripts?.['test:unit'],
@@ -140,7 +146,7 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   );
   assert.equal(
     packageJson.scripts?.['test:vscode'],
-    'npm run compile && vscode-test'
+    'npm run compile:clean && vscode-test'
   );
   assert.equal(
     packageJson.scripts?.['format'],

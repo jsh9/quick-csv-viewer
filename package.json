@@ -130,14 +130,16 @@
     }
   },
   "scripts": {
+    "clean": "node scripts/clean.cjs",
     "compile": "tsc -p ./",
+    "compile:clean": "npm run clean && npm run compile",
     "format": "prettier . --write --ignore-unknown",
     "format:check": "prettier . --check --ignore-unknown",
     "prepare": "husky",
-    "test": "npm run format:check && npm run compile && npm run test:coverage",
+    "test": "npm run format:check && npm run compile:clean && npm run test:coverage",
     "test:coverage": "c8 --all --src out/src --include 'out/src/**/*.js' --check-coverage --lines 95 --branches 95 --functions 95 npm run test:unit",
     "test:unit": "node scripts/run-tests.cjs",
-    "test:vscode": "npm run compile && vscode-test",
+    "test:vscode": "npm run compile:clean && vscode-test",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },
