@@ -137,7 +137,7 @@
     "format:check": "prettier . --check --ignore-unknown",
     "prepare": "husky",
     "test": "npm run format:check && npm run compile:clean && npm run test:coverage",
-    "test:coverage": "c8 --all --src out/src --include 'out/src/**/*.js' --check-coverage --lines 95 --branches 95 --functions 95 npm run test:unit",
+    "test:coverage": "node scripts/prepare-private-coverage.cjs && c8 --all --src out/src --include 'out/src/**/*.js' --exclude 'out/src/**/types.js' --check-coverage --statements 100 --lines 100 --branches 100 --functions 100 npm run test:unit",
     "test:unit": "node scripts/run-tests.cjs",
     "test:vscode": "npm run compile:clean && vscode-test",
     "watch": "tsc -watch -p ./",

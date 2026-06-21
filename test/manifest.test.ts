@@ -142,7 +142,7 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   );
   assert.equal(
     packageJson.scripts?.['test:coverage'],
-    "c8 --all --src out/src --include 'out/src/**/*.js' --check-coverage --lines 95 --branches 95 --functions 95 npm run test:unit"
+    "node scripts/prepare-private-coverage.cjs && c8 --all --src out/src --include 'out/src/**/*.js' --exclude 'out/src/**/types.js' --check-coverage --statements 100 --lines 100 --branches 100 --functions 100 npm run test:unit"
   );
   assert.equal(
     packageJson.scripts?.['test:vscode'],

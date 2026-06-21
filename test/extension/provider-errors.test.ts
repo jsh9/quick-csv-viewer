@@ -151,3 +151,41 @@ test('custom editor provider reports load, settings, and exact-shape errors', as
     }
   );
 });
+
+test('custom editor provider reports safe load errors', async () => {
+  await withMockedExtension(async ({ extension, vscode }) => {
+    const tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'quick-csv-viewer-extension-')
+    );
+
+    try {
+      const csvPath = path.join(tempDir, 'safe-load-error.csv');
+      await fs.writeFile(csvPath, 'a,b\n1,2', 'utf8');
+      extension.activate({
+        extensionUri: new FakeUri('/tmp/extension'),
+        subscriptions: []
+      });
+      const provider = getRegisteredProvider(vscode).provider;
+      const uri = new FakeUri(csvPath);
+      const document = await provider.openCustomDocument(uri);
+      const panel = createFakeWebviewPanel(vscode.ViewColumn.Active);
+
+      await provider.resolveCustomEditor(document, panel, {});
+      vscode.__state.configurationReadError = 'settings unavailable';
+      panel.webview.receive({ type: 'ready' });
+
+      await waitFor(() =>
+        panel.webview.messages.some(
+          (message) =>
+            isMessage(message) &&
+            message.type === 'error' &&
+            message.message === 'settings unavailable'
+        )
+      );
+
+      panel.dispose();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});

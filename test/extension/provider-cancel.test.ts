@@ -67,6 +67,66 @@ test('custom editor provider cancels first loads back to a default limited previ
   });
 });
 
+test('custom editor provider reports settings errors while cancelling first loads', async () => {
+  await withMockedExtension(
+    async ({ extension, vscode }) => {
+      const tempDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'quick-csv-viewer-extension-')
+      );
+
+      try {
+        vscode.__state.configuration.maxRows = 0;
+        const csvPath = path.join(tempDir, 'cancel-settings-error.csv');
+        await fs.writeFile(csvPath, 'a,b\n1,2\n3,4', 'utf8');
+        extension.activate({
+          extensionUri: new FakeUri('/tmp/extension'),
+          subscriptions: []
+        });
+        const provider = getRegisteredProvider(vscode).provider;
+        const uri = new FakeUri(csvPath);
+        const document = await provider.openCustomDocument(uri);
+        const panel = createFakeWebviewPanel(vscode.ViewColumn.Active);
+
+        await provider.resolveCustomEditor(document, panel, {});
+        panel.webview.receive({ type: 'ready' });
+        await waitFor(() =>
+          hasMessageType(panel.webview.messages, 'fullIndexStart')
+        );
+
+        vscode.__state.configurationUpdateError = 'cancel update failed';
+        panel.webview.receive({ type: 'cancelLoad' });
+        await waitFor(() =>
+          panel.webview.messages.some(
+            (message) =>
+              isMessage(message) &&
+              message.type === 'settingsError' &&
+              message.message === 'cancel update failed'
+          )
+        );
+
+        panel.dispose();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+    },
+    {
+      csvOverrides: {
+        indexCsvFile: (
+          _filePath: string,
+          options: { readonly signal?: AbortSignal }
+        ) =>
+          new Promise((_resolve, reject) => {
+            options.signal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true }
+            );
+          })
+      }
+    }
+  );
+});
+
 test('custom editor provider restores the previous successful view when cancelling a later load', async () => {
   const pendingSignals: AbortSignal[] = [];
 
@@ -133,6 +193,7 @@ test('custom editor provider restores the previous successful view when cancelli
             vscode.__state.configuration.maxRows === 1 &&
             vscode.__state.configuration.firstRowIsHeader === true
         );
+        await sleep(150);
 
         panel.dispose();
       } finally {

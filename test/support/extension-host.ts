@@ -86,7 +86,9 @@ export interface VscodeMock {
       (event: { affectsConfiguration(name: string): boolean }) => void
     >;
     readonly saveListeners: Array<(document: { uri: FakeUri }) => void>;
+    configurationReadError?: unknown;
     configurationUpdateError?: unknown;
+    executeCommandError?: unknown;
     provider?: RegisteredProvider;
   };
 }
@@ -255,6 +257,9 @@ function createVscodeMock(): VscodeMock {
       },
       executeCommand: async (...args) => {
         state.executedCommands.push(args);
+        if (state.executeCommandError !== undefined) {
+          throw state.executeCommandError;
+        }
       }
     },
     window: {
@@ -278,6 +283,10 @@ function createVscodeMock(): VscodeMock {
     },
     workspace: {
       getConfiguration: (section) => {
+        if (state.configurationReadError !== undefined) {
+          throw state.configurationReadError;
+        }
+
         assert.equal(section, 'quickCsvViewer');
         return {
           get: (key) => state.configuration[key],
@@ -398,6 +407,7 @@ export function isMessage(value: unknown): value is {
   readonly shape?: { readonly rowCount?: unknown };
   readonly payload?: {
     readonly maxRows?: unknown;
+    readonly firstRowIsHeader?: unknown;
     readonly shape?: unknown;
     readonly preview?: {
       readonly loadedRowCount?: unknown;

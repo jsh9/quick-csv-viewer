@@ -80,6 +80,7 @@ test('custom editor provider debounces matching external file changes and ignore
   let watchCallback:
     | ((eventType: string, changedFileName?: string | Buffer) => void)
     | undefined;
+  let watchErrorCallback: ((error: Error) => void) | undefined;
   let closeCount = 0;
 
   await withMockedExtension(
@@ -106,6 +107,7 @@ test('custom editor provider debounces matching external file changes and ignore
         }
         panel.webview.receive({ type: 'ready' });
         await waitFor(() => hasMessageType(panel.webview.messages, 'data'));
+        watchErrorCallback?.(new Error('watch failed'));
 
         const initialDataCount = countMessages(panel.webview.messages, 'data');
         for (const listener of vscode.__state.saveListeners) {
@@ -149,12 +151,127 @@ test('custom editor provider debounces matching external file changes and ignore
         ) => {
           watchCallback = callback;
           const watcher = {
-            on: () => watcher,
+            on: (event: string, listener: (error: Error) => void) => {
+              if (event === 'error') {
+                watchErrorCallback = listener;
+              }
+              return watcher;
+            },
             close: () => {
               closeCount += 1;
             }
           };
           return watcher;
+        }
+      }
+    }
+  );
+});
+
+test('custom editor provider drops exact shape results that resolve after abort', async () => {
+  let resolveShape:
+    | ((shape: {
+        readonly rowCount: number;
+        readonly columnCount: number;
+        readonly recordCount: number;
+      }) => void)
+    | undefined;
+  let emitShapeProgress:
+    | ((progress: {
+        readonly bytesRead: number;
+        readonly totalBytes: number;
+        readonly percent: number;
+        readonly recordCount: number;
+        readonly rowCount: number;
+        readonly columnCount: number;
+      }) => void)
+    | undefined;
+  let shapeSignal: AbortSignal | undefined;
+
+  await withMockedExtension(
+    async ({ extension, vscode }) => {
+      const tempDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'quick-csv-viewer-extension-')
+      );
+      let panel: FakeWebviewPanel | undefined;
+
+      try {
+        vscode.__state.configuration.maxRows = 1;
+        const csvPath = path.join(tempDir, 'abort-shape.csv');
+        await fs.writeFile(csvPath, 'a,b\n1,2\n3,4', 'utf8');
+        extension.activate({
+          extensionUri: new FakeUri('/tmp/extension'),
+          subscriptions: []
+        });
+        const provider = getRegisteredProvider(vscode).provider;
+        const uri = new FakeUri(csvPath);
+        const document = await provider.openCustomDocument(uri);
+        panel = createFakeWebviewPanel(vscode.ViewColumn.Active);
+        const activePanel = panel;
+
+        await provider.resolveCustomEditor(document, activePanel, {});
+        activePanel.webview.receive({ type: 'ready' });
+        await waitFor(() => Boolean(resolveShape));
+
+        activePanel.dispose();
+        assert.equal(shapeSignal?.aborted, true);
+        emitShapeProgress?.({
+          bytesRead: 1,
+          totalBytes: 1,
+          percent: 100,
+          recordCount: 3,
+          rowCount: 2,
+          columnCount: 2
+        });
+        resolveShape?.({
+          rowCount: 2,
+          columnCount: 2,
+          recordCount: 3
+        });
+        await sleep(20);
+        assert.equal(
+          hasMessageType(activePanel.webview.messages, 'shape'),
+          false
+        );
+        assert.equal(
+          hasMessageType(activePanel.webview.messages, 'shapeProgress'),
+          false
+        );
+      } finally {
+        panel?.dispose();
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+    },
+    {
+      nodeFsOverrides: {
+        watch: () => {
+          const watcher = {
+            on: () => watcher,
+            close: () => undefined
+          };
+          return watcher;
+        }
+      },
+      csvOverrides: {
+        scanCsvShape: (
+          _filePath: string,
+          options: {
+            readonly signal?: AbortSignal;
+            readonly onProgress?: (progress: {
+              readonly bytesRead: number;
+              readonly totalBytes: number;
+              readonly percent: number;
+              readonly recordCount: number;
+              readonly rowCount: number;
+              readonly columnCount: number;
+            }) => void;
+          }
+        ) => {
+          shapeSignal = options.signal;
+          emitShapeProgress = options.onProgress;
+          return new Promise((resolve) => {
+            resolveShape = resolve;
+          });
         }
       }
     }
