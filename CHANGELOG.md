@@ -2,6 +2,12 @@
 
 All notable changes to Quick CSV Viewer are documented in this file.
 
+## 0.0.3
+
+- Keep CSV diffs in VS Code's native diff editor while continuing to open CSV
+  files in Quick CSV Viewer by default.
+- Raise the minimum supported VS Code version to `^1.120.0`.
+
 ## 0.0.2
 
 - Refactor CSV parsing, indexing, preview, and formatting logic into focused

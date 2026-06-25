@@ -42,6 +42,23 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    // VS Code may ask this custom editor to resolve one side of a CSV diff.
+    // Hand matching diff tabs back to the native editor so both sides remain.
+    const activeTextDiff = getActiveTextDiffForDocument(document.uri);
+    if (activeTextDiff) {
+      webviewPanel.dispose();
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        activeTextDiff.original,
+        activeTextDiff.modified,
+        undefined,
+        {
+          viewColumn: webviewPanel.viewColumn ?? vscode.ViewColumn.Active
+        }
+      );
+      return;
+    }
+
     webviewPanel.webview.options = {
       enableScripts: true
     };
@@ -585,4 +602,22 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
 
     safeLoad();
   }
+}
+
+function getActiveTextDiffForDocument(
+  uri: vscode.Uri
+): vscode.TabInputTextDiff | undefined {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  if (!(input instanceof vscode.TabInputTextDiff)) {
+    return undefined;
+  }
+
+  if (
+    input.original.toString() === uri.toString() ||
+    input.modified.toString() === uri.toString()
+  ) {
+    return input;
+  }
+
+  return undefined;
 }

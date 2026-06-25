@@ -2,7 +2,7 @@
   "name": "quick-csv-viewer",
   "displayName": "Quick CSV Viewer",
   "description": "View and preview large CSV files in a readonly, fast VS Code custom editor.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "jsh9",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -26,7 +26,7 @@
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.120.0"
   },
   "categories": [
     "Other"
@@ -84,6 +84,9 @@
     "configurationDefaults": {
       "workbench.editorAssociations": {
         "*.csv": "quickCsvViewer.viewer"
+      },
+      "workbench.diffEditorAssociations": {
+        "*.csv": "default"
       }
     },
     "configuration": {
@@ -110,20 +113,21 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "quickCsvViewer.openCurrentFile"
+          "command": "quickCsvViewer.openCurrentFile",
+          "when": "!isInDiffEditor"
         }
       ],
       "editor/title": [
         {
           "command": "quickCsvViewer.openCurrentFile",
-          "when": "resourceExtname == .csv",
+          "when": "resourceScheme == file && resourceExtname == .csv && !isInDiffEditor",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "command": "quickCsvViewer.openCurrentFile",
-          "when": "resourceExtname == .csv",
+          "when": "resourceScheme == file && resourceExtname == .csv",
           "group": "navigation"
         }
       ]
@@ -146,7 +150,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "20.14.8",
-    "@types/vscode": "1.90.0",
+    "@types/vscode": "1.120.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^3.0.0",
     "c8": "^11.0.0",
