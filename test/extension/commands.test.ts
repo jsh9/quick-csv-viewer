@@ -96,6 +96,8 @@ test('open command resolves the active editor or tab when no resource is passed'
     vscode.window.tabGroups.activeTabGroup.activeTab = {
       input: new FakeTabInputTextDiff(originalUri, diffUri)
     };
+    // Verifies implicit command-palette use from a diff tab warns instead of
+    // opening one side. Explicit resources still represent a real file pick.
     await openCommand?.();
     assert.equal(
       vscode.__state.warnings.at(-1),

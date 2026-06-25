@@ -75,6 +75,8 @@ test('package contributes CSV viewer as the default editor association', async (
     ]?.['*.csv'],
     'quickCsvViewer.viewer'
   );
+  // These defaults are package-level routing, so assert them separately from
+  // provider behavior; VS Code consults them before extension code runs.
   assert.equal(
     packageJson.contributes?.configurationDefaults?.[
       'workbench.diffEditorAssociations'

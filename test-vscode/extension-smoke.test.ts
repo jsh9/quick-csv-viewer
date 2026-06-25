@@ -84,6 +84,8 @@ suite('Quick CSV Viewer VS Code smoke tests', () => {
       return hasChange(repository.state.workingTreeChanges, fileUri);
     });
 
+    // Verifies Git's unstaged change command stays in a native diff. This
+    // covers real git: URIs and tab inputs that unit fakes only approximate.
     await vscode.commands.executeCommand('git.openChange', fileUri);
 
     await waitFor(() => isGitTextDiffFor(fileUri));
@@ -107,6 +109,8 @@ suite('Quick CSV Viewer VS Code smoke tests', () => {
       );
     });
 
+    // Verifies staged changes keep the same native diff behavior. Staged Git
+    // changes are surfaced through a separate index state path in VS Code.
     await vscode.commands.executeCommand('git.openChange', fileUri);
 
     await waitFor(() => isGitTextDiffFor(fileUri));
@@ -148,6 +152,8 @@ async function openGitRepository(repoDir: string): Promise<GitRepository> {
   const api = git.getAPI(1);
   let repository: GitRepository | null = null;
 
+  // The Git extension opens repositories asynchronously in the extension host,
+  // so poll until the repository is ready before inspecting change state.
   await waitFor(async () => {
     repository = await api.openRepository(vscode.Uri.file(repoDir));
     if (!repository) {
@@ -187,6 +193,8 @@ function diffIncludesUri(
   input: vscode.TabInputTextDiff,
   uri: vscode.Uri
 ): boolean {
+  // Git diff sides may be git: URIs whose fsPath differs from the workspace
+  // file, so accept either an exact path or a URI containing the basename.
   return [input.original, input.modified].some(
     (diffUri) =>
       diffUri.toString().includes(path.basename(uri.fsPath)) ||

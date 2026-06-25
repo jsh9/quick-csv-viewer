@@ -42,6 +42,8 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    // VS Code may ask this custom editor to resolve one side of a CSV diff.
+    // Hand matching diff tabs back to the native editor so both sides remain.
     const activeTextDiff = getActiveTextDiffForDocument(document.uri);
     if (activeTextDiff) {
       webviewPanel.dispose();

@@ -27,6 +27,8 @@ test('custom editor provider reopens matching active text diffs with VS Code dif
     const modifiedDocument = await provider.openCustomDocument(modifiedUri);
     const modifiedPanel = createFakeWebviewPanel(vscode.ViewColumn.Beside);
 
+    // Verifies either side of the active diff is handed back to VS Code's
+    // native diff editor, because a table viewer cannot represent both sides.
     await provider.resolveCustomEditor(modifiedDocument, modifiedPanel, {});
 
     assert.equal(modifiedPanel.disposed, true);
@@ -42,6 +44,8 @@ test('custom editor provider reopens matching active text diffs with VS Code dif
     const originalDocument = await provider.openCustomDocument(originalUri);
     const originalPanel = createFakeWebviewPanel(undefined);
 
+    // Also covers the original side and the fallback view column so the
+    // escape hatch preserves native diff placement in both entry paths.
     await provider.resolveCustomEditor(originalDocument, originalPanel, {});
 
     assert.equal(originalPanel.disposed, true);
@@ -77,6 +81,8 @@ test('custom editor provider ignores unrelated active text diffs', async () => {
       const document = await provider.openCustomDocument(uri);
       const panel = createFakeWebviewPanel(vscode.ViewColumn.Active);
 
+      // Verifies unrelated diff state does not disable ordinary CSV opens.
+      // The provider should only escape when the diff contains this document.
       await provider.resolveCustomEditor(document, panel, {});
 
       assert.equal(panel.disposed, false);

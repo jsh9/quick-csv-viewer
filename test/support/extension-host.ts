@@ -105,6 +105,8 @@ export interface FakeWebview {
 export interface FakeWebviewPanel {
   readonly webview: FakeWebview;
   readonly viewColumn: number | undefined;
+  // Lets provider tests verify accidental custom panels are closed before the
+  // native diff is reopened, matching VS Code's diff escape-hatch behavior.
   disposed: boolean;
   readonly reveals: Array<{
     readonly column: number | undefined;
@@ -139,6 +141,8 @@ export class FakeTabInputCustom {
 }
 
 export class FakeTabInputTextDiff {
+  // Mirrors VS Code's two-sided diff input so tests can tell whether the
+  // original or modified side triggered custom-editor resolution.
   public constructor(
     public readonly original: FakeUri,
     public readonly modified: FakeUri

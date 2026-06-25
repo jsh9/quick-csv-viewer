@@ -7,6 +7,8 @@ const DIFF_EDITOR_WARNING =
   'Quick CSV Viewer is not available in diff editors.';
 
 export async function openCsvViewer(resource?: vscode.Uri): Promise<void> {
+  // A diff tab has two resources, so the command-palette path must not guess.
+  // Keep the native diff open instead of coercing the modified side into CSV.
   if (!resource && isActiveTextDiffEditor()) {
     void vscode.window.showWarningMessage(DIFF_EDITOR_WARNING);
     return;
