@@ -105,6 +105,7 @@ export interface FakeWebview {
 export interface FakeWebviewPanel {
   readonly webview: FakeWebview;
   readonly viewColumn: number | undefined;
+  disposed: boolean;
   readonly reveals: Array<{
     readonly column: number | undefined;
     readonly preserveFocus: boolean;
@@ -138,7 +139,10 @@ export class FakeTabInputCustom {
 }
 
 export class FakeTabInputTextDiff {
-  public constructor(public readonly modified: FakeUri) {}
+  public constructor(
+    public readonly original: FakeUri,
+    public readonly modified: FakeUri
+  ) {}
 }
 
 const moduleLoader = Module as unknown as {
@@ -340,6 +344,7 @@ export function createFakeWebviewPanel(
   let disposeListener: (() => void) | undefined;
   const panel: FakeWebviewPanel = {
     viewColumn,
+    disposed: false,
     reveals: [],
     webview: {
       options: {},
@@ -369,6 +374,7 @@ export function createFakeWebviewPanel(
       });
     },
     dispose: () => {
+      panel.disposed = true;
       disposeListener?.();
     }
   };

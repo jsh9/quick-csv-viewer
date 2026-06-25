@@ -246,9 +246,15 @@ test('private coverage: provider column count falls back before an index exists'
     const requireOverrides = {
       vscode: {
         ConfigurationTarget: { Global: 'global' },
+        TabInputTextDiff: class {},
         ViewColumn: { Active: 1 },
         commands: {
           executeCommand: async () => {}
+        },
+        window: {
+          tabGroups: {
+            activeTabGroup: {}
+          }
         },
         workspace: {
           getConfiguration: () => ({

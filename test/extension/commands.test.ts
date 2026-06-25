@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import {
   FakeTabInputCustom,
+  FakeTabInputText,
   FakeTabInputTextDiff,
   FakeUri,
   waitFor,
@@ -65,6 +66,18 @@ test('open command resolves the active editor or tab when no resource is passed'
     ]);
 
     vscode.window.activeTextEditor = undefined;
+    const textTabUri = new FakeUri('/tmp/text-tab.csv');
+    vscode.window.tabGroups.activeTabGroup.activeTab = {
+      input: new FakeTabInputText(textTabUri)
+    };
+    await openCommand?.();
+    assert.deepEqual(vscode.__state.executedCommands.at(-1), [
+      'vscode.openWith',
+      textTabUri,
+      'quickCsvViewer.viewer',
+      vscode.ViewColumn.Active
+    ]);
+
     const customTabUri = new FakeUri('/tmp/custom.csv');
     vscode.window.tabGroups.activeTabGroup.activeTab = {
       input: new FakeTabInputCustom(customTabUri)
@@ -77,14 +90,23 @@ test('open command resolves the active editor or tab when no resource is passed'
       vscode.ViewColumn.Active
     ]);
 
+    const explicitUri = new FakeUri('/tmp/direct.csv');
+    const originalUri = new FakeUri('/tmp/original.csv');
     const diffUri = new FakeUri('/tmp/diff.csv');
     vscode.window.tabGroups.activeTabGroup.activeTab = {
-      input: new FakeTabInputTextDiff(diffUri)
+      input: new FakeTabInputTextDiff(originalUri, diffUri)
     };
     await openCommand?.();
+    assert.equal(
+      vscode.__state.warnings.at(-1),
+      'Quick CSV Viewer is not available in diff editors.'
+    );
+    assert.equal(vscode.__state.executedCommands.length, 3);
+
+    await openCommand?.(explicitUri);
     assert.deepEqual(vscode.__state.executedCommands.at(-1), [
       'vscode.openWith',
-      diffUri,
+      explicitUri,
       'quickCsvViewer.viewer',
       vscode.ViewColumn.Active
     ]);
