@@ -92,6 +92,39 @@ suite('Quick CSV Viewer VS Code smoke tests', () => {
     assertGitTextDiffFor(fileUri);
   });
 
+  test('opens an explicit CSV viewer command while a matching Git diff is active', async function () {
+    this.timeout(10_000);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+    const { repoDir, fileUri } = await createGitCsvFixture();
+
+    try {
+      const repository = await openGitRepository(repoDir);
+      await fs.writeFile(fileUri.fsPath, 'a,b\n3,4\n', 'utf8');
+
+      await waitFor(async () => {
+        await repository.status();
+        return hasChange(repository.state.workingTreeChanges, fileUri);
+      });
+
+      await vscode.commands.executeCommand('git.openChange', fileUri);
+      await waitFor(() => isGitTextDiffFor(fileUri));
+
+      // Verifies real VS Code routing keeps an explicit viewer command from a
+      // matching Git diff. Unit fakes cannot prove this because the bug depends
+      // on custom-editor resolution while a native diff tab is active.
+      await vscode.commands.executeCommand(
+        'quickCsvViewer.openCurrentFile',
+        fileUri
+      );
+
+      await waitFor(() => isCustomViewerFor(fileUri));
+      assertCustomViewerFor(fileUri);
+    } finally {
+      await fs.rm(repoDir, { recursive: true, force: true });
+    }
+  });
+
   test('opens staged Git CSV diffs with VS Code text diff editor', async function () {
     this.timeout(10_000);
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -187,6 +220,20 @@ function assertGitTextDiffFor(uri: vscode.Uri): void {
   assert.ok(!(input instanceof vscode.TabInputCustom));
   assert.ok(diffIncludesUri(input, uri));
   assert.ok(diffIncludesGitUri(input));
+}
+
+function isCustomViewerFor(uri: vscode.Uri): boolean {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  return (
+    input instanceof vscode.TabInputCustom &&
+    input.uri.toString() === uri.toString()
+  );
+}
+
+function assertCustomViewerFor(uri: vscode.Uri): void {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  assert.ok(input instanceof vscode.TabInputCustom);
+  assert.equal(input.uri.toString(), uri.toString());
 }
 
 function diffIncludesUri(

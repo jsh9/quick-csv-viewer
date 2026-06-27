@@ -1,7 +1,4 @@
 import * as assert from 'node:assert/strict';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { test } from 'node:test';
 import {
   createFakeWebviewPanel,
@@ -11,7 +8,7 @@ import {
   withMockedExtension
 } from '../support/extension-host';
 
-test('custom editor provider reopens matching active text diffs with VS Code diff editor', async () => {
+test('custom editor provider opens requested files even when a matching diff is active', async () => {
   await withMockedExtension(async ({ extension, vscode }) => {
     extension.activate({
       extensionUri: new FakeUri('/tmp/extension'),
@@ -27,72 +24,27 @@ test('custom editor provider reopens matching active text diffs with VS Code dif
     const modifiedDocument = await provider.openCustomDocument(modifiedUri);
     const modifiedPanel = createFakeWebviewPanel(vscode.ViewColumn.Beside);
 
-    // Verifies either side of the active diff is handed back to VS Code's
-    // native diff editor, because a table viewer cannot represent both sides.
+    // Verifies the provider honors the document it is asked to resolve instead
+    // of inferring intent from active diff state. This protects explicit viewer
+    // opens while VS Code's diff editor association handles automatic diff
+    // routing before the provider is invoked.
     await provider.resolveCustomEditor(modifiedDocument, modifiedPanel, {});
 
-    assert.equal(modifiedPanel.disposed, true);
-    assert.equal(modifiedPanel.webview.html, '');
-    assert.deepEqual(vscode.__state.executedCommands.at(-1), [
-      'vscode.diff',
-      originalUri,
-      modifiedUri,
-      undefined,
-      { viewColumn: vscode.ViewColumn.Beside }
-    ]);
+    assert.equal(modifiedPanel.disposed, false);
+    assert.equal(modifiedPanel.webview.options.enableScripts, true);
+    assert.match(modifiedPanel.webview.html, /id="content"/);
+    assert.equal(vscode.__state.executedCommands.length, 0);
+    modifiedPanel.dispose();
 
     const originalDocument = await provider.openCustomDocument(originalUri);
     const originalPanel = createFakeWebviewPanel(undefined);
 
-    // Also covers the original side and the fallback view column so the
-    // escape hatch preserves native diff placement in both entry paths.
     await provider.resolveCustomEditor(originalDocument, originalPanel, {});
 
-    assert.equal(originalPanel.disposed, true);
-    assert.deepEqual(vscode.__state.executedCommands.at(-1), [
-      'vscode.diff',
-      originalUri,
-      modifiedUri,
-      undefined,
-      { viewColumn: vscode.ViewColumn.Active }
-    ]);
-  });
-});
-
-test('custom editor provider ignores unrelated active text diffs', async () => {
-  await withMockedExtension(async ({ extension, vscode }) => {
-    const tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'quick-csv-viewer-provider-diff-')
-    );
-
-    try {
-      extension.activate({
-        extensionUri: new FakeUri('/tmp/extension'),
-        subscriptions: []
-      });
-      const provider = getRegisteredProvider(vscode).provider;
-      vscode.window.tabGroups.activeTabGroup.activeTab = {
-        input: new FakeTabInputTextDiff(
-          new FakeUri(path.join(tempDir, 'original.csv')),
-          new FakeUri(path.join(tempDir, 'modified.csv'))
-        )
-      };
-      const uri = new FakeUri(path.join(tempDir, 'viewer.csv'));
-      const document = await provider.openCustomDocument(uri);
-      const panel = createFakeWebviewPanel(vscode.ViewColumn.Active);
-
-      // Verifies unrelated diff state does not disable ordinary CSV opens.
-      // The provider should only escape when the diff contains this document.
-      await provider.resolveCustomEditor(document, panel, {});
-
-      assert.equal(panel.disposed, false);
-      assert.equal(panel.webview.options.enableScripts, true);
-      assert.match(panel.webview.html, /id="content"/);
-      assert.equal(vscode.__state.executedCommands.length, 0);
-
-      panel.dispose();
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+    assert.equal(originalPanel.disposed, false);
+    assert.equal(originalPanel.webview.options.enableScripts, true);
+    assert.match(originalPanel.webview.html, /id="content"/);
+    assert.equal(vscode.__state.executedCommands.length, 0);
+    originalPanel.dispose();
   });
 });
