@@ -36,10 +36,12 @@ test('package contributes CSV viewer as the default editor association', async (
   const packageJson = JSON.parse(
     await fs.readFile(packageJsonPath, 'utf8')
   ) as {
+    readonly engines?: { readonly vscode?: unknown };
     readonly activationEvents?: unknown;
     readonly contributes?: {
       readonly configurationDefaults?: {
         readonly 'workbench.editorAssociations'?: Record<string, string>;
+        readonly 'workbench.diffEditorAssociations'?: Record<string, string>;
       };
       readonly configuration?: {
         readonly properties?: Record<string, unknown>;
@@ -52,6 +54,13 @@ test('package contributes CSV viewer as the default editor association', async (
         readonly command?: unknown;
         readonly title?: unknown;
       }>;
+      readonly menus?: Record<
+        string,
+        Array<{
+          readonly command?: unknown;
+          readonly when?: unknown;
+        }>
+      >;
       readonly customEditors?: Array<{
         readonly viewType?: unknown;
         readonly priority?: unknown;
@@ -66,11 +75,41 @@ test('package contributes CSV viewer as the default editor association', async (
     ]?.['*.csv'],
     'quickCsvViewer.viewer'
   );
+  // These defaults are package-level routing, so assert them separately from
+  // provider behavior; VS Code consults them before extension code runs.
+  assert.equal(
+    packageJson.contributes?.configurationDefaults?.[
+      'workbench.diffEditorAssociations'
+    ]?.['*.csv'],
+    'default'
+  );
+  assert.equal(packageJson.engines?.vscode, '^1.120.0');
 
   const openCommand = packageJson.contributes?.commands?.find(
     (command) => command.command === 'quickCsvViewer.openCurrentFile'
   );
   assert.equal(openCommand?.title, 'Open in Quick CSV Viewer');
+
+  const commandPaletteEntry = packageJson.contributes?.menus?.[
+    'commandPalette'
+  ]?.find((entry) => entry.command === 'quickCsvViewer.openCurrentFile');
+  assert.equal(commandPaletteEntry?.when, '!isInDiffEditor');
+
+  const editorTitleEntry = packageJson.contributes?.menus?.[
+    'editor/title'
+  ]?.find((entry) => entry.command === 'quickCsvViewer.openCurrentFile');
+  assert.equal(
+    editorTitleEntry?.when,
+    'resourceScheme == file && resourceExtname == .csv && !isInDiffEditor'
+  );
+
+  const explorerContextEntry = packageJson.contributes?.menus?.[
+    'explorer/context'
+  ]?.find((entry) => entry.command === 'quickCsvViewer.openCurrentFile');
+  assert.equal(
+    explorerContextEntry?.when,
+    'resourceScheme == file && resourceExtname == .csv'
+  );
 
   const customEditor = packageJson.contributes?.customEditors?.find(
     (editor) => editor.viewType === 'quickCsvViewer.viewer'

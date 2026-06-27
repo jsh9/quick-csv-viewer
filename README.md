@@ -32,6 +32,8 @@ It is hosted both on VS Code marketplace and Open VSX:
 Open any `.csv` file in VS Code and Quick CSV Viewer opens it with the custom
 viewer by default.
 
+Git staged and unstaged CSV diffs stay in VS Code's native diff editor.
+
 You can also run `Quick CSV Viewer: Open in Quick CSV Viewer` from the command
 palette, the editor title menu, or the Explorer context menu for a `.csv` file.
 

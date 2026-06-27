@@ -42,6 +42,9 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    // Resolve the requested custom editor directly. Diff routing belongs to
+    // VS Code's diff editor association because active tab state can also
+    // describe a deliberate viewer open from an already active diff tab.
     webviewPanel.webview.options = {
       enableScripts: true
     };

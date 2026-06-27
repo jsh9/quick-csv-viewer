@@ -246,9 +246,17 @@ test('private coverage: provider column count falls back before an index exists'
     const requireOverrides = {
       vscode: {
         ConfigurationTarget: { Global: 'global' },
+        TabInputTextDiff: class {},
         ViewColumn: { Active: 1 },
         commands: {
           executeCommand: async () => {}
+        },
+        window: {
+          // The provider checks active tab state before webview setup; this
+          // mock keeps the test on the column-count fallback path.
+          tabGroups: {
+            activeTabGroup: {}
+          }
         },
         workspace: {
           getConfiguration: () => ({
