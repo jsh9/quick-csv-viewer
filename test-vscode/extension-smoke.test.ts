@@ -7,6 +7,9 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 
 const execFileAsync = promisify(execFile);
+// Git smoke tests create real repositories; keep their roots so teardown can
+// remove them after VS Code closes diff editors that may hold file handles.
+const tempDirs: string[] = [];
 
 interface GitExtension {
   getAPI(version: 1): GitApi;
@@ -33,6 +36,9 @@ interface GitChange {
 suite('Quick CSV Viewer VS Code smoke tests', () => {
   suiteTeardown(async () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await Promise.all(
+      tempDirs.map((dir) => fs.rm(dir, { recursive: true, force: true }))
+    );
   });
 
   test('extension activates and contributes expected commands', async () => {
@@ -98,31 +104,27 @@ suite('Quick CSV Viewer VS Code smoke tests', () => {
 
     const { repoDir, fileUri } = await createGitCsvFixture();
 
-    try {
-      const repository = await openGitRepository(repoDir);
-      await fs.writeFile(fileUri.fsPath, 'a,b\n3,4\n', 'utf8');
+    const repository = await openGitRepository(repoDir);
+    await fs.writeFile(fileUri.fsPath, 'a,b\n3,4\n', 'utf8');
 
-      await waitFor(async () => {
-        await repository.status();
-        return hasChange(repository.state.workingTreeChanges, fileUri);
-      });
+    await waitFor(async () => {
+      await repository.status();
+      return hasChange(repository.state.workingTreeChanges, fileUri);
+    });
 
-      await vscode.commands.executeCommand('git.openChange', fileUri);
-      await waitFor(() => isGitTextDiffFor(fileUri));
+    await vscode.commands.executeCommand('git.openChange', fileUri);
+    await waitFor(() => isGitTextDiffFor(fileUri));
 
-      // Verifies real VS Code routing keeps an explicit viewer command from a
-      // matching Git diff. Unit fakes cannot prove this because the bug depends
-      // on custom-editor resolution while a native diff tab is active.
-      await vscode.commands.executeCommand(
-        'quickCsvViewer.openCurrentFile',
-        fileUri
-      );
+    // Verifies real VS Code routing keeps an explicit viewer command from a
+    // matching Git diff. Unit fakes cannot prove this because the bug depends
+    // on custom-editor resolution while a native diff tab is active.
+    await vscode.commands.executeCommand(
+      'quickCsvViewer.openCurrentFile',
+      fileUri
+    );
 
-      await waitFor(() => isCustomViewerFor(fileUri));
-      assertCustomViewerFor(fileUri);
-    } finally {
-      await fs.rm(repoDir, { recursive: true, force: true });
-    }
+    await waitFor(() => isCustomViewerFor(fileUri));
+    assertCustomViewerFor(fileUri);
   });
 
   test('opens staged Git CSV diffs with VS Code text diff editor', async function () {
@@ -162,6 +164,7 @@ async function createGitCsvFixture(): Promise<{
   const repoDir = await fs.mkdtemp(
     path.join(os.tmpdir(), 'quick-csv-viewer-git-diff-smoke-')
   );
+  tempDirs.push(repoDir);
   const filePath = path.join(repoDir, 'fixture.csv');
 
   await runGit(repoDir, ['init']);
