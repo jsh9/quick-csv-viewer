@@ -140,10 +140,11 @@
     "format": "prettier . --write --ignore-unknown",
     "format:check": "prettier . --check --ignore-unknown",
     "prepare": "husky",
-    "test": "npm run format:check && npm run compile:clean && npm run test:coverage",
+    "test": "npm run format:check && npm run typecheck:src && npm run compile:clean && npm run test:coverage",
     "test:coverage": "node scripts/prepare-private-coverage.cjs && c8 --all --src out/src --include 'out/src/**/*.js' --exclude 'out/src/**/types.js' --check-coverage --statements 100 --lines 100 --branches 100 --functions 100 npm run test:unit",
     "test:unit": "node scripts/run-tests.cjs",
     "test:vscode": "npm run compile:clean && vscode-test",
+    "typecheck:src": "tsc -p tsconfig.src.json",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },

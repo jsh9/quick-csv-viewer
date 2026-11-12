@@ -20,6 +20,7 @@ async function readExtensionSource(): Promise<string> {
     ['src', 'extension', 'webview', 'client', 'bootstrap.ts'],
     ['src', 'extension', 'webview', 'client', 'rendering.ts'],
     ['src', 'extension', 'webview', 'client', 'table.ts'],
+    ['src', 'extension', 'webview', 'client', 'transposed.ts'],
     ['src', 'extension', 'webview', 'client', 'virtualization.ts'],
     ['src', 'extension', 'webview', 'client', 'controls.ts'],
     ['src', 'extension', 'webview', 'client', 'script.ts']
@@ -80,6 +81,67 @@ test('webview exposes Quick view and View raw controls', async () => {
   );
   assert.match(source, /vscode\.postMessage\(\{ type: 'rawContents' \}\);/);
   assert.match(source, /'vscode\.openWith',\s*document\.uri,\s*'default'/);
+});
+
+test('webview places Transposed view between Quick view and View raw', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /id="quick-view"[^\n]*\n\s*<button class="mode-button" type="button" id="transposed-view" aria-pressed="false" disabled>Transposed view<\/button>\n\s*<button[^\n]*id="raw-contents"/
+  );
+});
+
+test('transposed view freezes a capped field column above striped rows', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /\.field-cell \{[\s\S]*?position: sticky;[\s\S]*?left: 0;[\s\S]*?z-index: 1;/
+  );
+  assert.match(
+    source,
+    /\.table-row:nth-child\(even\) \.field-cell \{\s*background: var\(--vscode-sideBar-background/
+  );
+  assert.match(source, /\.table-header \.field-cell \{[\s\S]*?z-index: 3;/);
+  assert.match(source, /firstColumnLimit[\s\S]*?'min\('/);
+  assert.match(source, /'40vw'\);/);
+});
+
+test('copy column names has a hidden live region next to its button', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /<button class="secondary-button" type="button" id="copy-column-names" title="Copy all column names as a bulleted list" disabled>Copy column names<\/button>\s*<span id="copy-status" class="visually-hidden" role="status"><\/span>\s*<div class="mode-tabs"/
+  );
+  assert.match(
+    source,
+    /\.visually-hidden \{[\s\S]*?position: absolute;[\s\S]*?clip: rect\(0 0 0 0\);/
+  );
+});
+
+test('table fills the space under the wrapping topbar instead of a fixed offset', async () => {
+  const source = await readExtensionSource();
+
+  assert.doesNotMatch(source, /calc\(100vh - 78px\)/);
+  assert.match(
+    source,
+    /body \{\s*display: flex;\s*flex-direction: column;\s*height: 100vh;/
+  );
+  assert.match(
+    source,
+    /main \{\s*display: flex;\s*flex: 1 1 auto;\s*flex-direction: column;\s*min-height: 0;/
+  );
+  assert.match(
+    source,
+    /\.table-scroll \{\s*flex: 1 1 auto;\s*min-height: min\(240px, 40vh\);/
+  );
+  assert.match(source, /\.topbar \{[\s\S]*?flex-wrap: wrap;/);
+  assert.match(
+    source,
+    /@media \(max-width: 640px\) \{[\s\S]*?\.info \{\s*flex: 0 0 auto;[\s\S]*?\.secondary-button \{\s*width: 100%;/
+  );
 });
 
 test('rows input rejects empty values before posting maxRows updates', async () => {
@@ -157,7 +219,7 @@ test('webview autosizes data columns from loaded rows', async () => {
   );
   assert.match(
     source,
-    /const template = \[INDEX_COLUMN_WIDTH, \.\.\.roundedWidths\]/
+    /applyGridTemplate\(scroll, \[INDEX_COLUMN_WIDTH, \.\.\.columnWidths\]\);/
   );
 });
 

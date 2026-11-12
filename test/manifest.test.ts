@@ -173,7 +173,11 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   );
   assert.equal(
     packageJson.scripts?.['test'],
-    'npm run format:check && npm run compile:clean && npm run test:coverage'
+    'npm run format:check && npm run typecheck:src && npm run compile:clean && npm run test:coverage'
+  );
+  assert.equal(
+    packageJson.scripts?.['typecheck:src'],
+    'tsc -p tsconfig.src.json'
   );
   assert.equal(
     packageJson.scripts?.['test:unit'],
