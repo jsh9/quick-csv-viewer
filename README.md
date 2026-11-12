@@ -29,7 +29,13 @@ It is hosted both on VS Code marketplace and Open VSX:
 
 ## 2. Screenshots
 
-![](./images/screenshots/quick-view.png)
+Quick view:
+
+![Quick view of a CSV file](./images/screenshots/quick-view.png)
+
+Transposed view of the same file:
+
+![Transposed view of a CSV file](./images/screenshots/transposed-view.png)
 
 ## 3. Usage
 

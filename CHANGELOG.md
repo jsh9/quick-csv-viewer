@@ -8,6 +8,11 @@ All notable changes to Quick CSV Viewer are documented in this file.
   CSV columns as rows, with frozen column names on the left.
 - Add a `Copy column names` button that copies all column names to the
   clipboard as a bulleted list.
+- Let the table fill the space under the info bar and wrap the toolbar on
+  narrow editors, so the bottom of the table is no longer cut off.
+- Fix the indexed view breaking when a background shape scan finishes while
+  the row index is still building.
+- Refresh the README screenshots with a light theme.
 
 ## 0.0.3
 
