@@ -137,7 +137,12 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
           full.shape = message.shape;
           full.shapeState = 'ready';
           full.shapeProgress = null;
-          renderFullViewer();
+          // A shape scan from an earlier load can finish while the index is
+          // still building. Keep the progress panel; fullIndexReady picks the
+          // shape up from here if its own payload has none.
+          if (viewState === 'fullReady') {
+            renderFullViewer();
+          }
           return;
         }
 
@@ -157,7 +162,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
         if (full) {
           full.shapeState = 'counting';
           full.shapeProgress = progress;
-          renderFullInfo();
+          if (viewState === 'fullReady') {
+            renderFullInfo();
+          }
           return;
         }
 
@@ -176,7 +183,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
         if (full) {
           full.shapeState = 'unavailable';
           full.shapeProgress = null;
-          renderFullInfo();
+          if (viewState === 'fullReady') {
+            renderFullInfo();
+          }
           return;
         }
 
@@ -253,9 +262,17 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       }
 
       if (message.type === 'fullIndexReady') {
+        // The host builds this payload before it finishes reading headers, so
+        // a shape that arrived during indexing can be newer than payload.shape.
+        const indexingShape =
+          viewState === 'fullIndexing' && full && full.shapeState === 'ready' ? full.shape : null;
+        const payload =
+          message.payload.shape === null && indexingShape
+            ? { ...message.payload, shape: indexingShape }
+            : message.payload;
         viewState = 'fullReady';
         cancelLoadRequested = false;
-        full = withShapeState(message.payload);
+        full = withShapeState(payload);
         previousReadyView = {
           type: 'full',
           payload: full
