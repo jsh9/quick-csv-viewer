@@ -5,13 +5,15 @@ All notable changes to Quick CSV Viewer are documented in this file.
 ## 0.0.4
 
 - Add a `Transposed view` mode next to `Quick view` and `View raw` that shows
-  CSV columns as rows, with frozen column names on the left.
+  CSV columns as rows, with frozen column names on the left. Each view keeps
+  its scroll position when you switch views or the viewer re-renders.
 - Add a `Copy column names` button that copies all column names to the
   clipboard as a bulleted list.
 - Let the table fill the space under the info bar and wrap the toolbar on
   narrow editors, so the bottom of the table is no longer cut off.
 - Fix the indexed view breaking when a background shape scan finishes while
-  the row index is still building.
+  the row index is still building, and the row and column counts staying on
+  "Counting..." after cancelling such a load.
 - Refresh the README screenshots with a light theme.
 
 ## 0.0.3
