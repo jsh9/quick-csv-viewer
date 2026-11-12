@@ -97,7 +97,8 @@ while scrolling. This keeps DOM size bounded for very large files.
 CSV column becomes a row and each CSV row becomes a column. Column names stay
 frozen on the left, and row indexes run across the frozen top row. When
 `quickCsvViewer.firstRowIsHeader` is enabled, the top-left cell shows `0`, the
-index of the header row.
+index of the header row. Columns in the transposed view size themselves and
+cannot be resized by dragging.
 
 The transposed view shows up to the first 100 rows of the current view. Very
 wide files show fewer rows (about 20,000 cells in total) so the viewer stays
@@ -120,7 +121,8 @@ list, one `•` line per column:
 The list matches the column labels shown in the viewer. When
 `quickCsvViewer.firstRowIsHeader` is disabled, that means the generated
 `Column 1`, `Column 2`, ... labels. Line breaks inside a column name become
-spaces so each column stays on one line. If the clipboard cannot be written,
+spaces so each column stays on one line, and the byte order mark that some
+tools (such as Excel's "CSV UTF-8") put at the start of a file is dropped. If the clipboard cannot be written,
 VS Code shows an error notification.
 
 ## 9. Raw Contents
@@ -141,7 +143,9 @@ npm run format
 `npm install` installs Husky hooks automatically. The pre-commit hook runs
 `npm test`.
 Prettier formats the project with an 80-column print width, and `npm test`
-checks formatting before compiling and running the test suite.
+checks formatting before compiling and running the test suite. It also
+type-checks `src/` on its own with `tsconfig.src.json`, so extension-host code
+cannot use the DOM types that the jsdom test helpers bring in.
 `test/webview-runtime.test.ts` runs the generated webview HTML and script in
 jsdom with a stubbed VS Code API, so webview behavior is tested by driving it
 with host messages.

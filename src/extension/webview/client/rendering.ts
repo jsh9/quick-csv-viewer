@@ -79,6 +79,34 @@ export function getRenderingScript(): string {
     }
 
     function renderLimited() {
+      renderKeepingScroll(renderLimitedView);
+    }
+
+    function renderFullViewer() {
+      renderKeepingScroll(renderFullView);
+    }
+
+    function renderKeepingScroll(render) {
+      // Re-rendering the same payload in the same view (a shape update, a
+      // wrap toggle) keeps the reader's place. View switches restore their
+      // own positions in setViewMode.
+      const scroll = content.querySelector('.table-scroll');
+      const payload = getCurrentTablePayload();
+      const position =
+        scroll && renderedView && renderedView.mode === viewMode && renderedView.payload === payload
+          ? { top: scroll.scrollTop, left: scroll.scrollLeft }
+          : null;
+      render();
+      renderedView = { mode: viewMode, payload };
+
+      const nextScroll = content.querySelector('.table-scroll');
+      if (position && nextScroll) {
+        nextScroll.scrollTop = position.top;
+        nextScroll.scrollLeft = position.left;
+      }
+    }
+
+    function renderLimitedView() {
       if (!data) {
         renderLoading();
         return;
@@ -259,7 +287,7 @@ export function getRenderingScript(): string {
       renderLimited();
     }
 
-    function renderFullViewer() {
+    function renderFullView() {
       if (!full) {
         renderLoading();
         return;

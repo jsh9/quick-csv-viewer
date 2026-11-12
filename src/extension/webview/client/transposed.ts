@@ -102,7 +102,7 @@ export function getTransposedScript(): string {
         return '';
       }
 
-      return '; transposed view shows first ' + formatInteger(limit);
+      return '; transposed view shows first ' + formatInteger(limit) + ' rows';
     }
 
     function renderTransposedTable(payload, rows, columnCount) {
@@ -114,7 +114,8 @@ export function getTransposedScript(): string {
       scroll.className = payload.wrapCellContents
         ? 'table-scroll transposed-scroll wrap-cells'
         : 'table-scroll transposed-scroll';
-      applyGridTemplate(scroll, getTransposedColumnWidths(cornerLabel, headers, rows, rowCells));
+      // Cap the frozen field column so it cannot cover a narrow editor.
+      applyGridTemplate(scroll, getTransposedColumnWidths(cornerLabel, headers, rows, rowCells), '40vw');
 
       const table = document.createElement('div');
       table.className = 'csv-table transposed-table';

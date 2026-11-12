@@ -161,7 +161,7 @@ test('webview runtime caps transposed cells for wide files and says so', () => {
     assert.equal(transposedBody(harness).length, 2500);
     assert.equal(
       harness.byId('preview-status').textContent,
-      'Showing first 30 rows; transposed view shows first 8'
+      'Showing first 30 rows; transposed view shows first 8 rows'
     );
   });
 });
@@ -206,7 +206,7 @@ test('webview runtime fetches indexed transposed rows once and ignores stale rep
     ]);
     assert.equal(
       harness.byId('preview-status').textContent,
-      'Virtual full-file view; transposed view shows first 100'
+      'Virtual full-file view; transposed view shows first 100 rows'
     );
 
     harness.click('quick-view');
@@ -265,39 +265,97 @@ test('webview runtime caches a transposed reply that arrives after switching bac
   });
 });
 
-test('webview runtime keeps each view scroll position and the virtual table', () => {
-  withHarness((harness) => {
-    const rows = Array.from({ length: 300 }, (_, index) => [
-      String(index + 1),
-      `name-${index}`,
-      'Lima'
-    ]);
-    harness.send(limitedDataMessage({ headers: HEADERS, rows }));
-    assert.ok(harness.document.querySelector('.virtual-rows'));
-
+test('webview runtime restores the indexed table position after a view switch', async () => {
+  const harness = createWebviewHarness();
+  try {
+    const [start, ready] = fullIndexMessages(HEADERS, 5000);
+    harness.send(start);
+    harness.send(ready);
     const tableScroll = harness.document.querySelector('.table-scroll');
     assert.ok(tableScroll);
-    tableScroll.scrollTop = 1234;
-    tableScroll.scrollLeft = 56;
+    // Rows are estimated at 31 px, so this offset is row 1,000.
+    tableScroll.scrollTop = 31_000;
 
     harness.click('transposed-view');
-    const transposedScroll =
-      harness.document.querySelector('.transposed-scroll');
-    assert.ok(transposedScroll);
-    assert.equal(transposedScroll.scrollTop, 0);
-    transposedScroll.scrollLeft = 78;
+    harness.click('quick-view');
+    const restored = harness.document.querySelector('.table-scroll');
+    assert.ok(restored);
+    assert.notEqual(restored, tableScroll);
+    assert.equal(restored.scrollTop, 31_000);
+
+    // jsdom fires no scroll events on its own; the browser does when the
+    // offset is restored, and the viewer then fetches that viewport.
+    const requestsBefore = fetchRequests(harness, 'rows-').length;
+    restored.dispatchEvent(new harness.window.Event('scroll'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const requests = fetchRequests(harness, 'rows-');
+    assert.equal(requests.length, requestsBefore + 1);
+    assert.equal(requests.at(-1)?.start, 990);
+    assert.deepEqual(harness.errors, []);
+  } finally {
+    harness.close();
+  }
+});
+
+test('webview runtime keeps the scroll position when the same view re-renders', () => {
+  withHarness((harness) => {
+    harness.send(limitedDataMessage({ headers: HEADERS, rows: ROWS }));
+    const scrollOf = () => {
+      const scroll = harness.document.querySelector('.table-scroll');
+      assert.ok(scroll);
+      return scroll;
+    };
+    scrollOf().scrollTop = 40;
+    scrollOf().scrollLeft = 30;
+
+    // A finished shape scan re-renders the current view.
+    const before = scrollOf();
+    harness.send({
+      type: 'shape',
+      shape: { rowCount: 3, columnCount: 3, recordCount: 4 }
+    });
+    assert.notEqual(scrollOf(), before);
+    assert.deepEqual([scrollOf().scrollTop, scrollOf().scrollLeft], [40, 30]);
+
+    harness.click('wrap-toggle');
+    assert.deepEqual([scrollOf().scrollTop, scrollOf().scrollLeft], [40, 30]);
+
+    harness.click('transposed-view');
+    scrollOf().scrollLeft = 70;
+    harness.send({
+      type: 'shape',
+      shape: { rowCount: 3, columnCount: 3, recordCount: 4 }
+    });
+    assert.equal(scrollOf().scrollLeft, 70);
 
     harness.click('quick-view');
-    const restoredTable = harness.document.querySelector('.table-scroll');
-    assert.ok(restoredTable);
-    assert.ok(harness.document.querySelector('.virtual-rows'));
-    assert.equal(restoredTable.scrollTop, 1234);
-    assert.equal(restoredTable.scrollLeft, 56);
+    assert.deepEqual([scrollOf().scrollTop, scrollOf().scrollLeft], [40, 30]);
+
+    // A new load is a new payload, so it starts at the top.
+    harness.send(limitedDataMessage({ headers: HEADERS, rows: ROWS }));
+    assert.deepEqual([scrollOf().scrollTop, scrollOf().scrollLeft], [0, 0]);
+  });
+});
+
+test('webview runtime caps the frozen field column for narrow editors', () => {
+  withHarness((harness) => {
+    harness.send(limitedDataMessage({ headers: HEADERS, rows: ROWS }));
+    const tableTemplate = (
+      harness.document.querySelector('.table-scroll') as HTMLElement
+    ).style.getPropertyValue('--column-template');
+    assert.match(tableTemplate, /^58px /);
 
     harness.click('transposed-view');
-    assert.equal(
-      harness.document.querySelector('.transposed-scroll')?.scrollLeft,
-      78
+    const scroll = harness.document.querySelector(
+      '.transposed-scroll'
+    ) as HTMLElement;
+    assert.match(
+      scroll.style.getPropertyValue('--column-template'),
+      /^min\(\d+px, 40vw\) /
+    );
+    assert.match(
+      scroll.style.getPropertyValue('--table-min-width'),
+      /^calc\(min\(\d+px, 40vw\) \+ \d+px\)$/
     );
   });
 });
@@ -319,6 +377,12 @@ test('webview runtime posts displayed column names and announces copy results', 
 
     harness.send({ type: 'columnNamesCopied', count: 1 });
     assert.equal(status.textContent, 'Copied 1 column name to the clipboard.');
+
+    // A repeat copy must change the live-region text to be announced again.
+    harness.send({ type: 'columnNamesCopied', count: 1 });
+    const repeated = harness.byId('copy-status').textContent ?? '';
+    assert.notEqual(repeated, 'Copied 1 column name to the clipboard.');
+    assert.equal(repeated.trim(), 'Copied 1 column name to the clipboard.');
 
     harness.send({
       type: 'copyColumnNamesError',

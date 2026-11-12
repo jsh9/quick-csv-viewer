@@ -90,145 +90,25 @@ test('webview places Transposed view between Quick view and View raw', async () 
     source,
     /id="quick-view"[^\n]*\n\s*<button class="mode-button" type="button" id="transposed-view" aria-pressed="false" disabled>Transposed view<\/button>\n\s*<button[^\n]*id="raw-contents"/
   );
-  assert.match(
-    source,
-    /transposedViewButton\.addEventListener\('click', \(\) => \{\s*setViewMode\('transposed'\);/
-  );
-  assert.match(
-    source,
-    /quickViewButton\.addEventListener\('click', \(\) => \{\s*setViewMode\('table'\);/
-  );
-  assert.match(
-    source,
-    /function renderViewModeButtons\(\) \{[\s\S]*?quickViewButton\.setAttribute\('aria-pressed', String\(viewMode === 'table'\)\);[\s\S]*?transposedViewButton\.setAttribute\('aria-pressed', String\(viewMode === 'transposed'\)\);/
-  );
-  assert.match(
-    source,
-    /function setControlsDisabled\(disabled\) \{[\s\S]*?transposedViewButton\.disabled = disabled;[\s\S]*?renderViewModeButtons\(\);/
-  );
 });
 
-test('view mode survives reloads and restores each view scroll position', async () => {
+test('transposed view freezes a capped field column above striped rows', async () => {
   const source = await readExtensionSource();
 
-  assert.match(source, /let viewMode = 'table';/);
-  assert.match(
-    source,
-    /function setViewMode\(mode\) \{[\s\S]*?saveScrollPosition\(viewMode\);\s*viewMode = mode;\s*renderViewModeButtons\(\);[\s\S]*?renderReadyView\(\);\s*restoreScrollPosition\(mode\);\s*\}/
-  );
-  assert.match(
-    source,
-    /function renderReadyView\(\) \{\s*if \(viewState === 'limited' \|\| viewState === 'limitedVirtual'\) \{\s*renderLimited\(\);\s*return;\s*\}\s*if \(viewState === 'fullReady'\) \{\s*renderFullViewer\(\);/
-  );
-  assert.match(
-    source,
-    /function applyWrapCellContents\(value\) \{[\s\S]*?resetVirtualMeasurements\(\);\s*renderReadyView\(\);/
-  );
-  assert.match(
-    source,
-    /function restoreScrollPosition\(mode\) \{[\s\S]*?saved\.source !== getCurrentTablePayload\(\)[\s\S]*?scroll\.scrollTop = saved\.top;\s*scroll\.scrollLeft = saved\.left;/
-  );
-  assert.match(
-    source,
-    /renderLimitedInfo\(\);\s*if \(viewMode === 'transposed'\) \{\s*renderTransposedLimited\(\);\s*return;\s*\}\s*if \(data\.preview\.rows\.length >= LIMITED_VIRTUAL_THRESHOLD\)/
-  );
-  assert.match(
-    source,
-    /renderFullInfo\(\);\s*if \(viewMode === 'transposed'\) \{\s*renderTransposedFull\(\);\s*return;\s*\}/
-  );
-});
-
-test('transposed view renders CSV columns as rows with a frozen field column', async () => {
-  const source = await readExtensionSource();
-
-  assert.match(
-    source,
-    /renderTransposedTable\(data, data\.preview\.rows\.slice\(0, getTransposedRowLimit\(columnCount\)\), columnCount\);/
-  );
-  assert.match(
-    source,
-    /const cornerLabel = payload\.firstRowIsHeader \? '0' : '';/
-  );
-  assert.match(
-    source,
-    /header\.append\(createTransposedRowNumberCell\(String\(row\.rowNumber\), false\)\);/
-  );
-  assert.match(
-    source,
-    /for \(const \[columnIndex, label\] of headers\.entries\(\)\) \{[\s\S]*?element\.append\(createFieldCell\(label\)\);[\s\S]*?element\.append\(createDataCell\(cells\[columnIndex\]\)\);/
-  );
-  assert.match(
-    source,
-    /applyGridTemplate\(scroll, getTransposedColumnWidths\(cornerLabel, headers, rows, rowCells\)\);/
-  );
   assert.match(
     source,
     /\.field-cell \{[\s\S]*?position: sticky;[\s\S]*?left: 0;[\s\S]*?z-index: 1;/
   );
+  assert.match(
+    source,
+    /\.table-row:nth-child\(even\) \.field-cell \{\s*background: var\(--vscode-sideBar-background/
+  );
   assert.match(source, /\.table-header \.field-cell \{[\s\S]*?z-index: 3;/);
-  assert.match(
-    source,
-    /querySelectorAll\('\.table-scroll:not\(\.transposed-scroll\)'\)/
-  );
+  assert.match(source, /firstColumnLimit[\s\S]*?'min\('/);
+  assert.match(source, /'40vw'\);/);
 });
 
-test('transposed view caps rendered cells so wide files stay responsive', async () => {
-  const source = await readExtensionSource();
-
-  assert.match(source, /const TRANSPOSED_MAX_ROWS = 100;/);
-  assert.match(source, /const TRANSPOSED_MAX_CELLS = 20000;/);
-  assert.match(
-    source,
-    /function getTransposedRowLimit\(columnCount\) \{[\s\S]*?const budgetRows = Math\.floor\(TRANSPOSED_MAX_CELLS \/ Math\.max\(1, columnCount\)\);\s*return Math\.max\(1, Math\.min\(TRANSPOSED_MAX_ROWS, budgetRows\)\);/
-  );
-  assert.match(
-    source,
-    /function getTransposedStatusSuffix\(\) \{[\s\S]*?const limit = getTransposedRowLimit\(getPayloadColumnCount\(payload\)\);[\s\S]*?'; transposed view shows first ' \+ formatInteger\(limit\)/
-  );
-  assert.match(
-    source,
-    /function setPreviewStatus\(message\) \{\s*previewStatus\.textContent = message \+ getTransposedStatusSuffix\(\);/
-  );
-});
-
-test('indexed transposed view fetches leading rows once per loaded payload', async () => {
-  const source = await readExtensionSource();
-
-  assert.match(
-    source,
-    /function requestTransposedRows\(count\) \{[\s\S]*?const requestId = 'transposed-' \+ String\(\+\+latestRequestId\);[\s\S]*?pendingTransposedRequest = \{[\s\S]*?source: full,\s*count[\s\S]*?type: 'fetchRows',[\s\S]*?start: 0,\s*count/
-  );
-  assert.match(
-    source,
-    /const count = Math\.min\(full\.totalRows, getTransposedRowLimit\(columnCount\)\);\s*if \(transposedCache && transposedCache\.source === full && transposedCache\.count === count\) \{\s*renderTransposedTable\(full, transposedCache\.rows, columnCount\);/
-  );
-  assert.match(
-    source,
-    /pendingTransposedRequest\.source === full &&\s*pendingTransposedRequest\.count === count\s*\) \{\s*return;\s*\}\s*requestTransposedRows\(count\);/
-  );
-  assert.match(
-    source,
-    /if \(pendingTransposedRequest && message\.requestId === pendingTransposedRequest\.requestId\) \{\s*receiveTransposedRows\(message\.payload\.rows\);/
-  );
-  assert.match(
-    source,
-    /function receiveTransposedRows\(rows\) \{[\s\S]*?if \(request\.source !== full\) \{[\s\S]*?transposedCache = \{\s*source: full,\s*count: request\.count,\s*rows\s*\};/
-  );
-  for (const type of ['loading', 'previewLoadStart', 'fullIndexStart']) {
-    assert.match(
-      source,
-      new RegExp(
-        `if \\(message\\.type === '${type}'\\) \\{[^}]*?pendingTransposedRequest = null;`
-      )
-    );
-  }
-  assert.match(
-    source,
-    /function renderTransposedFull\(\) \{\s*clearVirtualViewport\(\);/
-  );
-});
-
-test('copy column names button posts the displayed column labels', async () => {
+test('copy column names has a hidden live region next to its button', async () => {
   const source = await readExtensionSource();
 
   assert.match(
@@ -237,44 +117,7 @@ test('copy column names button posts the displayed column labels', async () => {
   );
   assert.match(
     source,
-    /copyColumnNamesButton\.addEventListener\('click', \(\) => \{[\s\S]*?const columnNames = getCurrentColumnNames\(\);[\s\S]*?type: 'copyColumnNames',\s*value: columnNames/
-  );
-  assert.match(
-    source,
-    /function getCurrentColumnNames\(\) \{[\s\S]*?return getHeaders\(payload, getPayloadColumnCount\(payload\)\);/
-  );
-  assert.match(
-    source,
-    /copyColumnNamesButton\.disabled = disabled \|\| getCurrentColumnNames\(\)\.length === 0;/
-  );
-  assert.match(
-    source,
-    /await vscode\.env\.clipboard\.writeText\(formatBulletedList\(message\.value\)\);/
-  );
-});
-
-test('copy column names announces results in a live region that renders do not overwrite', async () => {
-  const source = await readExtensionSource();
-
-  assert.match(
-    source,
-    /if \(message\.type === 'columnNamesCopied'\) \{[\s\S]*?showCopyColumnNamesFeedback\(\s*'Copied!',\s*'Copied ' \+ formatInteger\(count\)/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'copyColumnNamesError'\) \{\s*showCopyColumnNamesFeedback\('Copy failed', message\.message \|\| 'Unable to copy column names\.'\);\s*return;/
-  );
-  assert.match(
-    source,
-    /function showCopyColumnNamesFeedback\(label, announcement\) \{[\s\S]*?copyStatus\.textContent = announcement;[\s\S]*?copyStatus\.textContent = '';/
-  );
-  assert.match(
-    source,
     /\.visually-hidden \{[\s\S]*?position: absolute;[\s\S]*?clip: rect\(0 0 0 0\);/
-  );
-  assert.match(
-    source,
-    /void vscode\.window\.showErrorMessage\(\s*`Unable to copy column names: \$\{reason\}`\s*\);/
   );
 });
 
@@ -292,12 +135,12 @@ test('table fills the space under the wrapping topbar instead of a fixed offset'
   );
   assert.match(
     source,
-    /\.table-scroll \{\s*flex: 1 1 auto;\s*min-height: 240px;/
+    /\.table-scroll \{\s*flex: 1 1 auto;\s*min-height: min\(240px, 40vh\);/
   );
   assert.match(source, /\.topbar \{[\s\S]*?flex-wrap: wrap;/);
   assert.match(
     source,
-    /@media \(max-width: 640px\) \{[\s\S]*?\.info \{\s*flex: 0 0 auto;/
+    /@media \(max-width: 640px\) \{[\s\S]*?\.info \{\s*flex: 0 0 auto;[\s\S]*?\.secondary-button \{\s*width: 100%;/
   );
 });
 

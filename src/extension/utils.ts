@@ -15,9 +15,13 @@ export function formatError(error: unknown): string {
 }
 
 export function formatBulletedList(items: readonly string[]): string {
-  // Keep one bullet per item even when a CSV header field spans lines.
+  // Keep one bullet per item even when a CSV header field spans lines, and
+  // drop the byte order mark that a UTF-8 BOM file leaves on its first field.
   return items
-    .map((item) => `• ${item.replace(/\r\n|[\n\r\u0085\u2028\u2029]/g, ' ')}`)
+    .map(
+      (item) =>
+        `• ${item.replace(/^\uFEFF/, '').replace(/\r\n|[\n\r\u0085\u2028\u2029]/g, ' ')}`
+    )
     .join('\n');
 }
 

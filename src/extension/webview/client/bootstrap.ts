@@ -59,6 +59,7 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
     let transposedCache = null;
     let pendingTransposedRequest = null;
     let savedScrollPositions = { table: null, transposed: null };
+    let renderedView = null;
     let copyFeedbackTimer = 0;
 
     content.focus({ preventScroll: true });

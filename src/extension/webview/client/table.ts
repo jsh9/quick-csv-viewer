@@ -212,12 +212,16 @@ export function getTableScript(): string {
       applyGridTemplate(scroll, [INDEX_COLUMN_WIDTH, ...columnWidths]);
     }
 
-    function applyGridTemplate(scroll, columnWidths) {
+    function applyGridTemplate(scroll, columnWidths, firstColumnLimit) {
       const roundedWidths = columnWidths.map((width) => Math.max(1, Math.round(width)));
-      const template = roundedWidths.map((width) => String(width) + 'px').join(' ');
-      const totalWidth = roundedWidths.reduce((sum, width) => sum + width, 0);
-      scroll.style.setProperty('--column-template', template);
-      scroll.style.setProperty('--table-min-width', String(totalWidth) + 'px');
+      const columns = roundedWidths.map((width) => String(width) + 'px');
+      if (firstColumnLimit) {
+        columns[0] = 'min(' + columns[0] + ', ' + firstColumnLimit + ')';
+      }
+
+      const restWidth = roundedWidths.slice(1).reduce((sum, width) => sum + width, 0);
+      scroll.style.setProperty('--column-template', columns.join(' '));
+      scroll.style.setProperty('--table-min-width', 'calc(' + columns[0] + ' + ' + String(restWidth) + 'px)');
     }
 
     function applyCurrentColumnTemplate() {

@@ -73,7 +73,9 @@ export function getControlsScript(): string {
       }
 
       copyColumnNamesButton.textContent = label;
-      copyStatus.textContent = announcement;
+      // Identical live-region text is not announced again, so vary it.
+      copyStatus.textContent =
+        copyStatus.textContent === announcement ? announcement + '\u00a0' : announcement;
       copyFeedbackTimer = setTimeout(() => {
         copyFeedbackTimer = 0;
         copyColumnNamesButton.textContent = COPY_COLUMN_NAMES_LABEL;

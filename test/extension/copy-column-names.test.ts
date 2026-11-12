@@ -27,6 +27,8 @@ test('column names are formatted as a bulleted list with one line per name', () 
     formatBulletedList(['a\u2028b', 'c\u2029d', 'e\u0085f']),
     '• a b\n• c d\n• e f'
   );
+  // A UTF-8 BOM file leaves U+FEFF on its first header field.
+  assert.equal(formatBulletedList(['\uFEFFid', 'name']), '• id\n• name');
 });
 
 test('string arrays are recognized only when every item is text', () => {

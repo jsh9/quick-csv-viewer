@@ -255,7 +255,7 @@ export function getWebviewStyles(): string {
 
     .table-scroll {
       flex: 1 1 auto;
-      min-height: 240px;
+      min-height: min(240px, 40vh);
       overflow: auto;
       border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
       border-radius: 4px;
@@ -441,7 +441,8 @@ export function getWebviewStyles(): string {
       }
 
       .actions,
-      .mode-tabs {
+      .mode-tabs,
+      .secondary-button {
         width: 100%;
       }
 
