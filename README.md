@@ -136,6 +136,9 @@ npm run format
 `npm test`.
 Prettier formats the project with an 80-column print width, and `npm test`
 checks formatting before compiling and running the test suite.
+`test/webview-runtime.test.ts` runs the generated webview HTML and script in
+jsdom with a stubbed VS Code API, so webview behavior is tested by driving it
+with host messages.
 
 Use VS Code's extension host launch flow to test the viewer manually with the
 small and large files in `sample-data/`.
