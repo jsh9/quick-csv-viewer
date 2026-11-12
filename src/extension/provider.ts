@@ -447,6 +447,21 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
         currentSettings = previousLoad.settings;
         fullIndex = previousLoad.fullIndex;
         await webviewPanel.webview.postMessage({ type: 'restorePreviousView' });
+        // A shape scan can finish while the cancelled load runs. The restored
+        // view keeps its older shape state, so send the cached shape for its
+        // settings, or make sure a scan is still working on one.
+        const cachedShape = getCachedShape(
+          previousLoad.snapshot,
+          previousLoad.settings.firstRowIsHeader
+        );
+        if (cachedShape) {
+          await webviewPanel.webview.postMessage({
+            type: 'shape',
+            shape: cachedShape
+          });
+        } else {
+          ensureExactShape(previousLoad.snapshot);
+        }
         await updateSettingsWithoutReload({
           maxRows: previousLoad.settings.maxRows,
           firstRowIsHeader: previousLoad.settings.firstRowIsHeader

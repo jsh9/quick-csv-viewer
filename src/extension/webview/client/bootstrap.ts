@@ -166,11 +166,18 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
           full.shape = message.shape;
           full.shapeState = 'ready';
           full.shapeProgress = null;
-          renderFullViewer();
+          // A shape scan from an earlier load can finish while the index is
+          // still building. Keep the progress panel; fullIndexReady picks the
+          // shape up from here if its own payload has none.
+          if (viewState === 'fullReady') {
+            renderFullViewer();
+          }
           return;
         }
 
-        setShapeText('ready', message.shape, null);
+        if (viewState !== 'previewLoading') {
+          setShapeText('ready', message.shape, null);
+        }
         return;
       }
 
@@ -186,11 +193,15 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
         if (full) {
           full.shapeState = 'counting';
           full.shapeProgress = progress;
-          renderFullInfo();
+          if (viewState === 'fullReady') {
+            renderFullInfo();
+          }
           return;
         }
 
-        setShapeText('counting', null, progress);
+        if (viewState !== 'previewLoading') {
+          setShapeText('counting', null, progress);
+        }
         return;
       }
 
@@ -205,11 +216,15 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
         if (full) {
           full.shapeState = 'unavailable';
           full.shapeProgress = null;
-          renderFullInfo();
+          if (viewState === 'fullReady') {
+            renderFullInfo();
+          }
           return;
         }
 
-        setShapeText('unavailable', null, null);
+        if (viewState !== 'previewLoading') {
+          setShapeText('unavailable', null, null);
+        }
         return;
       }
 
@@ -284,9 +299,20 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       }
 
       if (message.type === 'fullIndexReady') {
+        // Shape messages received while this load was indexing can be newer
+        // than payload.shape, so keep their state when the payload has none.
+        const indexingFull = viewState === 'fullIndexing' ? full : null;
         viewState = 'fullReady';
         cancelLoadRequested = false;
         full = withShapeState(message.payload);
+        if (full.shape === null && indexingFull) {
+          if (indexingFull.shapeState === 'ready') {
+            full.shape = indexingFull.shape;
+            full.shapeState = 'ready';
+          } else if (indexingFull.shapeState === 'counting') {
+            full.shapeProgress = indexingFull.shapeProgress;
+          }
+        }
         previousReadyView = {
           type: 'full',
           payload: full

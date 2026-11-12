@@ -107,6 +107,14 @@ export async function postCsvData(
         firstRowIsHeader: settings.firstRowIsHeader,
         columnCount
       });
+
+      if (generation !== getLatestGeneration()) {
+        return;
+      }
+
+      // A shape scan can finish while the header record is read.
+      const readyShape =
+        exactShapes.getCachedShape(snapshot, settings.firstRowIsHeader) ?? null;
       const indexedDataRowCount = getDataRowCount(
         index.indexedRecordCount,
         settings.firstRowIsHeader
@@ -116,7 +124,7 @@ export async function postCsvData(
         type: 'fullIndexReady',
         payload: {
           ...metadata,
-          shape,
+          shape: readyShape,
           totalRows: getDisplayRowCount(indexedDataRowCount, settings.maxRows),
           isComplete: index.isComplete,
           columnCount,
