@@ -88,7 +88,7 @@ test('webview places Transposed view between Quick view and View raw', async () 
 
   assert.match(
     source,
-    /id="quick-view"[^\n]*\n\s*<button class="mode-button" type="button" id="transposed-view" aria-pressed="false">Transposed view<\/button>\n\s*<button[^\n]*id="raw-contents"/
+    /id="quick-view"[^\n]*\n\s*<button class="mode-button" type="button" id="transposed-view" aria-pressed="false" disabled>Transposed view<\/button>\n\s*<button[^\n]*id="raw-contents"/
   );
   assert.match(
     source,
@@ -108,13 +108,25 @@ test('webview places Transposed view between Quick view and View raw', async () 
   );
 });
 
-test('view mode survives reloads and rerenders the current ready view', async () => {
+test('view mode survives reloads and restores each view scroll position', async () => {
   const source = await readExtensionSource();
 
   assert.match(source, /let viewMode = 'table';/);
   assert.match(
     source,
-    /function setViewMode\(mode\) \{[\s\S]*?viewMode = mode;[\s\S]*?resetVirtualMeasurements\(\);[\s\S]*?renderLimited\(\);[\s\S]*?renderFullViewer\(\);/
+    /function setViewMode\(mode\) \{[\s\S]*?saveScrollPosition\(viewMode\);\s*viewMode = mode;\s*renderViewModeButtons\(\);[\s\S]*?renderReadyView\(\);\s*restoreScrollPosition\(mode\);\s*\}/
+  );
+  assert.match(
+    source,
+    /function renderReadyView\(\) \{\s*if \(viewState === 'limited' \|\| viewState === 'limitedVirtual'\) \{\s*renderLimited\(\);\s*return;\s*\}\s*if \(viewState === 'fullReady'\) \{\s*renderFullViewer\(\);/
+  );
+  assert.match(
+    source,
+    /function applyWrapCellContents\(value\) \{[\s\S]*?resetVirtualMeasurements\(\);\s*renderReadyView\(\);/
+  );
+  assert.match(
+    source,
+    /function restoreScrollPosition\(mode\) \{[\s\S]*?saved\.source !== getCurrentTablePayload\(\)[\s\S]*?scroll\.scrollTop = saved\.top;\s*scroll\.scrollLeft = saved\.left;/
   );
   assert.match(
     source,
@@ -129,10 +141,9 @@ test('view mode survives reloads and rerenders the current ready view', async ()
 test('transposed view renders CSV columns as rows with a frozen field column', async () => {
   const source = await readExtensionSource();
 
-  assert.match(source, /const TRANSPOSED_MAX_ROWS = 100;/);
   assert.match(
     source,
-    /renderTransposedTable\(data, data\.preview\.rows\.slice\(0, TRANSPOSED_MAX_ROWS\), columnCount\);/
+    /renderTransposedTable\(data, data\.preview\.rows\.slice\(0, getTransposedRowLimit\(columnCount\)\), columnCount\);/
   );
   assert.match(
     source,
@@ -148,6 +159,10 @@ test('transposed view renders CSV columns as rows with a frozen field column', a
   );
   assert.match(
     source,
+    /applyGridTemplate\(scroll, getTransposedColumnWidths\(cornerLabel, headers, rows, rowCells\)\);/
+  );
+  assert.match(
+    source,
     /\.field-cell \{[\s\S]*?position: sticky;[\s\S]*?left: 0;[\s\S]*?z-index: 1;/
   );
   assert.match(source, /\.table-header \.field-cell \{[\s\S]*?z-index: 3;/);
@@ -157,12 +172,39 @@ test('transposed view renders CSV columns as rows with a frozen field column', a
   );
 });
 
-test('indexed transposed view fetches leading rows with its own request id', async () => {
+test('transposed view caps rendered cells so wide files stay responsive', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /const TRANSPOSED_MAX_ROWS = 100;/);
+  assert.match(source, /const TRANSPOSED_MAX_CELLS = 20000;/);
+  assert.match(
+    source,
+    /function getTransposedRowLimit\(columnCount\) \{[\s\S]*?const budgetRows = Math\.floor\(TRANSPOSED_MAX_CELLS \/ Math\.max\(1, columnCount\)\);\s*return Math\.max\(1, Math\.min\(TRANSPOSED_MAX_ROWS, budgetRows\)\);/
+  );
+  assert.match(
+    source,
+    /function getTransposedStatusSuffix\(\) \{[\s\S]*?const limit = getTransposedRowLimit\(getPayloadColumnCount\(payload\)\);[\s\S]*?'; transposed view shows first ' \+ formatInteger\(limit\)/
+  );
+  assert.match(
+    source,
+    /function setPreviewStatus\(message\) \{\s*previewStatus\.textContent = message \+ getTransposedStatusSuffix\(\);/
+  );
+});
+
+test('indexed transposed view fetches leading rows once per loaded payload', async () => {
   const source = await readExtensionSource();
 
   assert.match(
     source,
-    /function requestTransposedRows\(\) \{[\s\S]*?const requestId = 'transposed-' \+ String\(\+\+latestRequestId\);[\s\S]*?pendingTransposedRequest = \{[\s\S]*?source: full[\s\S]*?type: 'fetchRows',[\s\S]*?start: 0,[\s\S]*?count: Math\.min\(full\.totalRows, TRANSPOSED_MAX_ROWS\)/
+    /function requestTransposedRows\(count\) \{[\s\S]*?const requestId = 'transposed-' \+ String\(\+\+latestRequestId\);[\s\S]*?pendingTransposedRequest = \{[\s\S]*?source: full,\s*count[\s\S]*?type: 'fetchRows',[\s\S]*?start: 0,\s*count/
+  );
+  assert.match(
+    source,
+    /const count = Math\.min\(full\.totalRows, getTransposedRowLimit\(columnCount\)\);\s*if \(transposedCache && transposedCache\.source === full && transposedCache\.count === count\) \{\s*renderTransposedTable\(full, transposedCache\.rows, columnCount\);/
+  );
+  assert.match(
+    source,
+    /pendingTransposedRequest\.source === full &&\s*pendingTransposedRequest\.count === count\s*\) \{\s*return;\s*\}\s*requestTransposedRows\(count\);/
   );
   assert.match(
     source,
@@ -170,21 +212,20 @@ test('indexed transposed view fetches leading rows with its own request id', asy
   );
   assert.match(
     source,
-    /function receiveTransposedRows\(rows\) \{[\s\S]*?if \(request\.source !== full\) \{[\s\S]*?transposedRows = rows;[\s\S]*?transposedRowsSource = full;/
+    /function receiveTransposedRows\(rows\) \{[\s\S]*?if \(request\.source !== full\) \{[\s\S]*?transposedCache = \{\s*source: full,\s*count: request\.count,\s*rows\s*\};/
   );
-  assert.match(
-    source,
-    /if \(transposedRows && transposedRowsSource === full\) \{\s*renderTransposedTable\(full, transposedRows, columnCount\);/
-  );
+  for (const type of ['loading', 'previewLoadStart', 'fullIndexStart']) {
+    assert.match(
+      source,
+      new RegExp(
+        `if \\(message\\.type === '${type}'\\) \\{[^}]*?pendingTransposedRequest = null;`
+      )
+    );
+  }
   assert.match(
     source,
     /function renderTransposedFull\(\) \{\s*clearVirtualViewport\(\);/
   );
-  assert.match(
-    source,
-    /function setPreviewStatus\(message\) \{\s*previewStatus\.textContent = message \+ getTransposedStatusSuffix\(\);/
-  );
-  assert.match(source, /'; transposed view shows first '/);
 });
 
 test('copy column names button posts the displayed column labels', async () => {
@@ -192,7 +233,7 @@ test('copy column names button posts the displayed column labels', async () => {
 
   assert.match(
     source,
-    /<button class="secondary-button" type="button" id="copy-column-names" title="Copy all column names as a bulleted list">Copy column names<\/button>\s*<div class="mode-tabs"/
+    /<button class="secondary-button" type="button" id="copy-column-names" title="Copy all column names as a bulleted list" disabled>Copy column names<\/button>\s*<span id="copy-status" class="visually-hidden" role="status"><\/span>\s*<div class="mode-tabs"/
   );
   assert.match(
     source,
@@ -208,19 +249,55 @@ test('copy column names button posts the displayed column labels', async () => {
   );
   assert.match(
     source,
-    /if \(message\.type === 'columnNamesCopied'\) \{\s*showCopyColumnNamesFeedback\('Copied!'\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'copyColumnNamesError'\) \{\s*showCopyColumnNamesFeedback\('Copy failed'\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'copyColumnNames'\) \{\s*void handleCopyColumnNames\(message\)/
-  );
-  assert.match(
-    source,
     /await vscode\.env\.clipboard\.writeText\(formatBulletedList\(message\.value\)\);/
+  );
+});
+
+test('copy column names announces results in a live region that renders do not overwrite', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /if \(message\.type === 'columnNamesCopied'\) \{[\s\S]*?showCopyColumnNamesFeedback\(\s*'Copied!',\s*'Copied ' \+ formatInteger\(count\)/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'copyColumnNamesError'\) \{\s*showCopyColumnNamesFeedback\('Copy failed', message\.message \|\| 'Unable to copy column names\.'\);\s*return;/
+  );
+  assert.match(
+    source,
+    /function showCopyColumnNamesFeedback\(label, announcement\) \{[\s\S]*?copyStatus\.textContent = announcement;[\s\S]*?copyStatus\.textContent = '';/
+  );
+  assert.match(
+    source,
+    /\.visually-hidden \{[\s\S]*?position: absolute;[\s\S]*?clip: rect\(0 0 0 0\);/
+  );
+  assert.match(
+    source,
+    /void vscode\.window\.showErrorMessage\(\s*`Unable to copy column names: \$\{reason\}`\s*\);/
+  );
+});
+
+test('table fills the space under the wrapping topbar instead of a fixed offset', async () => {
+  const source = await readExtensionSource();
+
+  assert.doesNotMatch(source, /calc\(100vh - 78px\)/);
+  assert.match(
+    source,
+    /body \{\s*display: flex;\s*flex-direction: column;\s*height: 100vh;/
+  );
+  assert.match(
+    source,
+    /main \{\s*display: flex;\s*flex: 1 1 auto;\s*flex-direction: column;\s*min-height: 0;/
+  );
+  assert.match(
+    source,
+    /\.table-scroll \{\s*flex: 1 1 auto;\s*min-height: 240px;/
+  );
+  assert.match(source, /\.topbar \{[\s\S]*?flex-wrap: wrap;/);
+  assert.match(
+    source,
+    /@media \(max-width: 640px\) \{[\s\S]*?\.info \{\s*flex: 0 0 auto;/
   );
 });
 
@@ -299,7 +376,7 @@ test('webview autosizes data columns from loaded rows', async () => {
   );
   assert.match(
     source,
-    /const template = \[INDEX_COLUMN_WIDTH, \.\.\.roundedWidths\]/
+    /applyGridTemplate\(scroll, \[INDEX_COLUMN_WIDTH, \.\.\.columnWidths\]\);/
   );
 });
 

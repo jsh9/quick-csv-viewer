@@ -17,7 +17,7 @@ export function formatError(error: unknown): string {
 export function formatBulletedList(items: readonly string[]): string {
   // Keep one bullet per item even when a CSV header field spans lines.
   return items
-    .map((item) => `• ${item.replace(/\r\n|\r|\n/g, ' ')}`)
+    .map((item) => `• ${item.replace(/\r\n|[\n\r\u0085\u2028\u2029]/g, ' ')}`)
     .join('\n');
 }
 

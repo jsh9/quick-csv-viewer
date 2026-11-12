@@ -390,7 +390,10 @@ export function getRenderingScript(): string {
 
       wrapToggle.checked = value;
       resetVirtualMeasurements();
+      renderReadyView();
+    }
 
+    function renderReadyView() {
       if (viewState === 'limited' || viewState === 'limitedVirtual') {
         renderLimited();
         return;

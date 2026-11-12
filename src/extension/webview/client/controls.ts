@@ -22,18 +22,36 @@ export function getControlsScript(): string {
         return;
       }
 
+      saveScrollPosition(viewMode);
       viewMode = mode;
       renderViewModeButtons();
-      resetVirtualMeasurements();
+      // Measured row heights stay valid for the same payload, so keeping them
+      // lets the restored scroll offset land on the same rows.
+      renderReadyView();
+      restoreScrollPosition(mode);
+    }
 
-      if (viewState === 'limited' || viewState === 'limitedVirtual') {
-        renderLimited();
+    function saveScrollPosition(mode) {
+      const scroll = content.querySelector('.table-scroll');
+      savedScrollPositions[mode] = scroll
+        ? {
+            source: getCurrentTablePayload(),
+            top: scroll.scrollTop,
+            left: scroll.scrollLeft
+          }
+        : null;
+    }
+
+    function restoreScrollPosition(mode) {
+      const saved = savedScrollPositions[mode];
+      const scroll = content.querySelector('.table-scroll');
+      if (!saved || !scroll || saved.source !== getCurrentTablePayload()) {
         return;
       }
 
-      if (viewState === 'fullReady') {
-        renderFullViewer();
-      }
+      // Virtual views fetch the rows for the restored offset from their scroll handler.
+      scroll.scrollTop = saved.top;
+      scroll.scrollLeft = saved.left;
     }
 
     function getCurrentColumnNames() {
@@ -45,7 +63,7 @@ export function getControlsScript(): string {
       return getHeaders(payload, getPayloadColumnCount(payload));
     }
 
-    function showCopyColumnNamesFeedback(label) {
+    function showCopyColumnNamesFeedback(label, announcement) {
       if (copyFeedbackTimer) {
         clearTimeout(copyFeedbackTimer);
       } else {
@@ -55,10 +73,12 @@ export function getControlsScript(): string {
       }
 
       copyColumnNamesButton.textContent = label;
+      copyStatus.textContent = announcement;
       copyFeedbackTimer = setTimeout(() => {
         copyFeedbackTimer = 0;
         copyColumnNamesButton.textContent = COPY_COLUMN_NAMES_LABEL;
         copyColumnNamesButton.style.minWidth = '';
+        copyStatus.textContent = '';
       }, COPY_FEEDBACK_MS);
     }
 

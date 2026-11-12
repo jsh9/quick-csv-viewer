@@ -209,11 +209,15 @@ export function getTableScript(): string {
     }
 
     function applyColumnTemplate(scroll, columnWidths) {
+      applyGridTemplate(scroll, [INDEX_COLUMN_WIDTH, ...columnWidths]);
+    }
+
+    function applyGridTemplate(scroll, columnWidths) {
       const roundedWidths = columnWidths.map((width) => Math.max(1, Math.round(width)));
-      const template = [INDEX_COLUMN_WIDTH, ...roundedWidths].map((width) => String(width) + 'px').join(' ');
-      const totalWidth = roundedWidths.reduce((sum, width) => sum + width, INDEX_COLUMN_WIDTH);
+      const template = roundedWidths.map((width) => String(width) + 'px').join(' ');
+      const totalWidth = roundedWidths.reduce((sum, width) => sum + width, 0);
       scroll.style.setProperty('--column-template', template);
-      scroll.style.setProperty('--table-min-width', Math.max(INDEX_COLUMN_WIDTH, totalWidth) + 'px');
+      scroll.style.setProperty('--table-min-width', String(totalWidth) + 'px');
     }
 
     function applyCurrentColumnTemplate() {

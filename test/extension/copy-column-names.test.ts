@@ -23,6 +23,10 @@ test('column names are formatted as a bulleted list with one line per name', () 
     formatBulletedList(['id', 'first\nname', 'notes\r\nmore\rtext', '']),
     '• id\n• first name\n• notes more text\n• '
   );
+  assert.equal(
+    formatBulletedList(['a\u2028b', 'c\u2029d', 'e\u0085f']),
+    '• a b\n• c d\n• e f'
+  );
 });
 
 test('string arrays are recognized only when every item is text', () => {
@@ -57,10 +61,28 @@ test('copy column names rejects malformed payloads without touching the clipboar
       () => countMessages(panel.webview.messages, 'copyColumnNamesError') === 2
     );
     assert.equal(vscode.__state.clipboardText, undefined);
+    assert.deepEqual(vscode.__state.errors, [
+      'Unable to copy column names: Column names must be a list of text values.',
+      'Unable to copy column names: Column names must be a list of text values.'
+    ]);
   });
 });
 
-test('copy column names reports clipboard failures to the webview', async () => {
+test('copy column names refuses to clear the clipboard with an empty list', async () => {
+  await withCopyPanel(async ({ vscode, panel }) => {
+    vscode.__state.clipboardText = 'previous clipboard';
+    panel.webview.receive({ type: 'copyColumnNames', value: [] });
+
+    const error = await waitForMessage(panel, 'copyColumnNamesError');
+    assert.equal(error.message, 'There are no column names to copy.');
+    assert.equal(vscode.__state.clipboardText, 'previous clipboard');
+    assert.deepEqual(vscode.__state.errors, [
+      'Unable to copy column names: There are no column names to copy.'
+    ]);
+  });
+});
+
+test('copy column names reports clipboard failures to the webview and the user', async () => {
   await withCopyPanel(async ({ vscode, panel }) => {
     vscode.__state.clipboardWriteError = new Error('Clipboard unavailable.');
     panel.webview.receive({ type: 'copyColumnNames', value: ['id'] });
@@ -68,6 +90,9 @@ test('copy column names reports clipboard failures to the webview', async () => 
     const error = await waitForMessage(panel, 'copyColumnNamesError');
     assert.equal(error.message, 'Clipboard unavailable.');
     assert.equal(countMessages(panel.webview.messages, 'columnNamesCopied'), 0);
+    assert.deepEqual(vscode.__state.errors, [
+      'Unable to copy column names: Clipboard unavailable.'
+    ]);
   });
 });
 

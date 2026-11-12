@@ -8,6 +8,9 @@ export function getWebviewStyles(): string {
     }
 
     body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
       margin: 0;
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
@@ -16,13 +19,15 @@ export function getWebviewStyles(): string {
     }
 
     .topbar {
+      flex: 0 0 auto;
       position: sticky;
       top: 0;
       z-index: 3;
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 8px 12px;
       min-height: 42px;
       padding: 8px 12px;
       border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
@@ -31,6 +36,7 @@ export function getWebviewStyles(): string {
 
     .info {
       display: flex;
+      flex: 1 1 520px;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
@@ -112,6 +118,7 @@ export function getWebviewStyles(): string {
       align-items: center;
       gap: 8px;
       flex: 0 0 auto;
+      margin-left: auto;
       flex-wrap: wrap;
     }
 
@@ -138,6 +145,18 @@ export function getWebviewStyles(): string {
     button:focus {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     .secondary-button {
@@ -183,6 +202,10 @@ export function getWebviewStyles(): string {
     }
 
     main {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
       padding: 12px;
     }
 
@@ -231,7 +254,7 @@ export function getWebviewStyles(): string {
     }
 
     .table-scroll {
-      height: calc(100vh - 78px);
+      flex: 1 1 auto;
       min-height: 240px;
       overflow: auto;
       border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
@@ -411,6 +434,10 @@ export function getWebviewStyles(): string {
       .topbar {
         align-items: stretch;
         flex-direction: column;
+      }
+
+      .info {
+        flex: 0 0 auto;
       }
 
       .actions,

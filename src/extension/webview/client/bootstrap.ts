@@ -5,6 +5,7 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
     const transposedViewButton = document.getElementById('transposed-view');
     const rawContentsButton = document.getElementById('raw-contents');
     const copyColumnNamesButton = document.getElementById('copy-column-names');
+    const copyStatus = document.getElementById('copy-status');
     const fileSize = document.getElementById('file-size');
     const csvShape = document.getElementById('csv-shape');
     const rowsInput = document.getElementById('rows-input');
@@ -28,6 +29,7 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
     const MIN_MANUAL_COLUMN_WIDTH = 48;
     const MAX_MANUAL_COLUMN_WIDTH = 900;
     const TRANSPOSED_MAX_ROWS = 100;
+    const TRANSPOSED_MAX_CELLS = 20000;
     const COPY_COLUMN_NAMES_LABEL = 'Copy column names';
     const COPY_FEEDBACK_MS = 1500;
 
@@ -54,9 +56,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
     let columnWidthCount = 0;
     let activeColumnResize = null;
     let viewMode = 'table';
-    let transposedRows = null;
-    let transposedRowsSource = null;
+    let transposedCache = null;
     let pendingTransposedRequest = null;
+    let savedScrollPositions = { table: null, transposed: null };
     let copyFeedbackTimer = 0;
 
     content.focus({ preventScroll: true });
@@ -122,6 +124,7 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       if (message.type === 'loading') {
         viewState = 'loading';
         cancelLoadRequested = false;
+        pendingTransposedRequest = null;
         data = null;
         full = null;
         previewLoad = null;
@@ -228,6 +231,7 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       if (message.type === 'previewLoadStart') {
         viewState = 'previewLoading';
         cancelLoadRequested = false;
+        pendingTransposedRequest = null;
         data = null;
         full = null;
         previewLoad = message.payload;
@@ -252,6 +256,7 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       if (message.type === 'fullIndexStart') {
         viewState = 'fullIndexing';
         cancelLoadRequested = false;
+        pendingTransposedRequest = null;
         data = null;
         full = message.payload;
         previewLoad = null;
@@ -316,13 +321,16 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       }
 
       if (message.type === 'columnNamesCopied') {
-        showCopyColumnNamesFeedback('Copied!');
+        const count = typeof message.count === 'number' ? message.count : 0;
+        showCopyColumnNamesFeedback(
+          'Copied!',
+          'Copied ' + formatInteger(count) + (count === 1 ? ' column name' : ' column names') + ' to the clipboard.'
+        );
         return;
       }
 
       if (message.type === 'copyColumnNamesError') {
-        showCopyColumnNamesFeedback('Copy failed');
-        previewStatus.textContent = message.message || 'Unable to copy column names.';
+        showCopyColumnNamesFeedback('Copy failed', message.message || 'Unable to copy column names.');
         return;
       }
 

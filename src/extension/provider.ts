@@ -417,11 +417,12 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
       message: WebviewMessage
     ): Promise<void> => {
       if (!isStringArray(message.value)) {
-        await webviewPanel.webview.postMessage({
-          type: 'copyColumnNamesError',
-          message: 'Column names must be a list of text values.'
-        });
-        return;
+        throw new Error('Column names must be a list of text values.');
+      }
+
+      if (message.value.length === 0) {
+        // Writing an empty string would silently clear the user's clipboard.
+        throw new Error('There are no column names to copy.');
       }
 
       await vscode.env.clipboard.writeText(formatBulletedList(message.value));
@@ -522,9 +523,13 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
 
         if (message.type === 'copyColumnNames') {
           void handleCopyColumnNames(message).catch(async (error: unknown) => {
+            const reason = formatError(error);
+            void vscode.window.showErrorMessage(
+              `Unable to copy column names: ${reason}`
+            );
             await webviewPanel.webview.postMessage({
               type: 'copyColumnNamesError',
-              message: formatError(error)
+              message: reason
             });
           });
           return;

@@ -93,9 +93,12 @@ frozen on the left, and row indexes run across the frozen top row. When
 `quickCsvViewer.firstRowIsHeader` is enabled, the top-left cell shows `0`, the
 index of the header row.
 
-The transposed view shows up to the first 100 rows of the current view. When
-more rows are available, the info bar says so. Switch back with `Quick view`.
-The selected view stays active when you change settings or the file reloads.
+The transposed view shows up to the first 100 rows of the current view. Very
+wide files show fewer rows (about 20,000 cells in total) so the viewer stays
+responsive. When more rows are available, the info bar says how many the
+transposed view shows. Switch back with `Quick view`; each view keeps its
+scroll position. The selected view stays active when you change settings or
+the file reloads.
 
 ## 8. Copy Column Names
 
@@ -111,7 +114,8 @@ list, one `•` line per column:
 The list matches the column labels shown in the viewer. When
 `quickCsvViewer.firstRowIsHeader` is disabled, that means the generated
 `Column 1`, `Column 2`, ... labels. Line breaks inside a column name become
-spaces so each column stays on one line.
+spaces so each column stays on one line. If the clipboard cannot be written,
+VS Code shows an error notification.
 
 ## 9. Raw Contents
 

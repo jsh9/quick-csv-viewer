@@ -7,7 +7,7 @@ export function getTransposedScript(): string {
         return;
       }
 
-      renderTransposedTable(data, data.preview.rows.slice(0, TRANSPOSED_MAX_ROWS), columnCount);
+      renderTransposedTable(data, data.preview.rows.slice(0, getTransposedRowLimit(columnCount)), columnCount);
     }
 
     function renderTransposedFull() {
@@ -18,28 +18,39 @@ export function getTransposedScript(): string {
         return;
       }
 
-      if (transposedRows && transposedRowsSource === full) {
-        renderTransposedTable(full, transposedRows, columnCount);
+      const count = Math.min(full.totalRows, getTransposedRowLimit(columnCount));
+      if (transposedCache && transposedCache.source === full && transposedCache.count === count) {
+        renderTransposedTable(full, transposedCache.rows, columnCount);
         return;
       }
 
       content.replaceChildren(status('Loading rows for transposed view...'));
-      requestTransposedRows();
+      if (
+        pendingTransposedRequest &&
+        pendingTransposedRequest.source === full &&
+        pendingTransposedRequest.count === count
+      ) {
+        return;
+      }
+
+      requestTransposedRows(count);
     }
 
-    function requestTransposedRows() {
+    function requestTransposedRows(count) {
       // Indexed views only hold the visible viewport, so fetch the leading
-      // rows separately. The latest request wins; older replies are ignored.
+      // rows separately. Load-start messages clear the pending request because
+      // the host drops replies from older load generations.
       const requestId = 'transposed-' + String(++latestRequestId);
       pendingTransposedRequest = {
         requestId,
-        source: full
+        source: full,
+        count
       };
       vscode.postMessage({
         type: 'fetchRows',
         requestId,
         start: 0,
-        count: Math.min(full.totalRows, TRANSPOSED_MAX_ROWS)
+        count
       });
     }
 
@@ -50,11 +61,20 @@ export function getTransposedScript(): string {
         return;
       }
 
-      transposedRows = rows;
-      transposedRowsSource = full;
+      transposedCache = {
+        source: full,
+        count: request.count,
+        rows
+      };
       if (viewMode === 'transposed') {
         renderTransposedFull();
       }
+    }
+
+    function getTransposedRowLimit(columnCount) {
+      // Wide files get fewer transposed rows so the DOM stays bounded.
+      const budgetRows = Math.floor(TRANSPOSED_MAX_CELLS / Math.max(1, columnCount));
+      return Math.max(1, Math.min(TRANSPOSED_MAX_ROWS, budgetRows));
     }
 
     function clearVirtualViewport() {
@@ -72,11 +92,17 @@ export function getTransposedScript(): string {
     }
 
     function getTransposedStatusSuffix() {
-      if (viewMode !== 'transposed' || getTransposableRowCount() <= TRANSPOSED_MAX_ROWS) {
+      const payload = getCurrentTablePayload();
+      if (viewMode !== 'transposed' || !payload) {
         return '';
       }
 
-      return '; transposed view shows first ' + formatInteger(TRANSPOSED_MAX_ROWS);
+      const limit = getTransposedRowLimit(getPayloadColumnCount(payload));
+      if (getTransposableRowCount() <= limit) {
+        return '';
+      }
+
+      return '; transposed view shows first ' + formatInteger(limit);
     }
 
     function renderTransposedTable(payload, rows, columnCount) {
@@ -88,7 +114,7 @@ export function getTransposedScript(): string {
       scroll.className = payload.wrapCellContents
         ? 'table-scroll transposed-scroll wrap-cells'
         : 'table-scroll transposed-scroll';
-      applyTransposedTemplate(scroll, getTransposedColumnWidths(cornerLabel, headers, rows, rowCells));
+      applyGridTemplate(scroll, getTransposedColumnWidths(cornerLabel, headers, rows, rowCells));
 
       const table = document.createElement('div');
       table.className = 'csv-table transposed-table';
@@ -163,13 +189,5 @@ export function getTransposedScript(): string {
       }
 
       return widths;
-    }
-
-    function applyTransposedTemplate(scroll, columnWidths) {
-      const roundedWidths = columnWidths.map((width) => Math.max(1, Math.round(width)));
-      const template = roundedWidths.map((width) => String(width) + 'px').join(' ');
-      const totalWidth = roundedWidths.reduce((sum, width) => sum + width, 0);
-      scroll.style.setProperty('--column-template', template);
-      scroll.style.setProperty('--table-min-width', String(totalWidth) + 'px');
     }`;
 }
