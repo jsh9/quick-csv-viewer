@@ -30,8 +30,11 @@ ${getWebviewStyles()}
       <span id="preview-status"></span>
     </div>
     <div class="actions">
+      <button class="secondary-button" type="button" id="copy-column-names" title="Copy all column names as a bulleted list" disabled>Copy column names</button>
+      <span id="copy-status" class="visually-hidden" role="status"></span>
       <div class="mode-tabs" role="toolbar" aria-label="CSV view mode">
         <button class="mode-button" type="button" id="quick-view" aria-pressed="true">Quick view</button>
+        <button class="mode-button" type="button" id="transposed-view" aria-pressed="false" disabled>Transposed view</button>
         <button class="mode-button raw-action" type="button" id="raw-contents" aria-pressed="false">View raw</button>
       </div>
     </div>

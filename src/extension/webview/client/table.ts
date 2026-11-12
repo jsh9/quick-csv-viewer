@@ -45,15 +45,19 @@ export function getTableScript(): string {
       element.append(createIndexCell(String(row.rowNumber), 'rowheader'));
       const cells = normalizeCells(row.cells, columnCount);
       for (const value of cells) {
-        const cell = document.createElement('div');
-        cell.className = 'table-cell';
-        cell.setAttribute('role', 'cell');
-        appendCellContent(cell, value);
-        cell.title = value;
-        element.append(cell);
+        element.append(createDataCell(value));
       }
 
       return element;
+    }
+
+    function createDataCell(value) {
+      const cell = document.createElement('div');
+      cell.className = 'table-cell';
+      cell.setAttribute('role', 'cell');
+      appendCellContent(cell, value);
+      cell.title = value;
+      return cell;
     }
 
     function createHeaderCell(label, columnIndex) {
@@ -205,11 +209,19 @@ export function getTableScript(): string {
     }
 
     function applyColumnTemplate(scroll, columnWidths) {
+      applyGridTemplate(scroll, [INDEX_COLUMN_WIDTH, ...columnWidths]);
+    }
+
+    function applyGridTemplate(scroll, columnWidths, firstColumnLimit) {
       const roundedWidths = columnWidths.map((width) => Math.max(1, Math.round(width)));
-      const template = [INDEX_COLUMN_WIDTH, ...roundedWidths].map((width) => String(width) + 'px').join(' ');
-      const totalWidth = roundedWidths.reduce((sum, width) => sum + width, INDEX_COLUMN_WIDTH);
-      scroll.style.setProperty('--column-template', template);
-      scroll.style.setProperty('--table-min-width', Math.max(INDEX_COLUMN_WIDTH, totalWidth) + 'px');
+      const columns = roundedWidths.map((width) => String(width) + 'px');
+      if (firstColumnLimit) {
+        columns[0] = 'min(' + columns[0] + ', ' + firstColumnLimit + ')';
+      }
+
+      const restWidth = roundedWidths.slice(1).reduce((sum, width) => sum + width, 0);
+      scroll.style.setProperty('--column-template', columns.join(' '));
+      scroll.style.setProperty('--table-min-width', 'calc(' + columns[0] + ' + ' + String(restWidth) + 'px)');
     }
 
     function applyCurrentColumnTemplate() {
@@ -221,7 +233,7 @@ export function getTableScript(): string {
       const columnCount = getPayloadColumnCount(payload);
       ensureColumnWidthState(columnCount);
       const columnWidths = getColumnWidths(payload, columnCount);
-      for (const scroll of document.querySelectorAll('.table-scroll')) {
+      for (const scroll of document.querySelectorAll('.table-scroll:not(.transposed-scroll)')) {
         applyColumnTemplate(scroll, columnWidths);
       }
     }

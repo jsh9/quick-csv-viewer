@@ -1,12 +1,87 @@
 export function getControlsScript(): string {
   return /* js */ `    function setControlsDisabled(disabled) {
       quickViewButton.disabled = disabled;
+      transposedViewButton.disabled = disabled;
       rawContentsButton.disabled = disabled;
+      copyColumnNamesButton.disabled = disabled || getCurrentColumnNames().length === 0;
       rowsInput.disabled = disabled;
       wrapToggle.disabled = disabled;
       headerToggle.disabled = disabled;
-      quickViewButton.setAttribute('aria-pressed', 'true');
+      renderViewModeButtons();
+    }
+
+    function renderViewModeButtons() {
+      quickViewButton.setAttribute('aria-pressed', String(viewMode === 'table'));
+      transposedViewButton.setAttribute('aria-pressed', String(viewMode === 'transposed'));
       rawContentsButton.setAttribute('aria-pressed', 'false');
+    }
+
+    function setViewMode(mode) {
+      if (viewMode === mode) {
+        renderViewModeButtons();
+        return;
+      }
+
+      saveScrollPosition(viewMode);
+      viewMode = mode;
+      renderViewModeButtons();
+      // Measured row heights stay valid for the same payload, so keeping them
+      // lets the restored scroll offset land on the same rows.
+      renderReadyView();
+      restoreScrollPosition(mode);
+    }
+
+    function saveScrollPosition(mode) {
+      const scroll = content.querySelector('.table-scroll');
+      savedScrollPositions[mode] = scroll
+        ? {
+            source: getCurrentTablePayload(),
+            top: scroll.scrollTop,
+            left: scroll.scrollLeft
+          }
+        : null;
+    }
+
+    function restoreScrollPosition(mode) {
+      const saved = savedScrollPositions[mode];
+      const scroll = content.querySelector('.table-scroll');
+      if (!saved || !scroll || saved.source !== getCurrentTablePayload()) {
+        return;
+      }
+
+      // Virtual views fetch the rows for the restored offset from their scroll handler.
+      scroll.scrollTop = saved.top;
+      scroll.scrollLeft = saved.left;
+    }
+
+    function getCurrentColumnNames() {
+      const payload = getCurrentTablePayload();
+      if (!payload) {
+        return [];
+      }
+
+      return getHeaders(payload, getPayloadColumnCount(payload));
+    }
+
+    function showCopyColumnNamesFeedback(label, announcement) {
+      if (copyFeedbackTimer) {
+        clearTimeout(copyFeedbackTimer);
+      } else {
+        // Keep the toolbar from shifting while the shorter feedback label shows.
+        copyColumnNamesButton.style.minWidth =
+          String(Math.ceil(copyColumnNamesButton.getBoundingClientRect().width)) + 'px';
+      }
+
+      copyColumnNamesButton.textContent = label;
+      // Identical live-region text is not announced again, so vary it.
+      copyStatus.textContent =
+        copyStatus.textContent === announcement ? announcement + '\u00a0' : announcement;
+      copyFeedbackTimer = setTimeout(() => {
+        copyFeedbackTimer = 0;
+        copyColumnNamesButton.textContent = COPY_COLUMN_NAMES_LABEL;
+        copyColumnNamesButton.style.minWidth = '';
+        copyStatus.textContent = '';
+      }, COPY_FEEDBACK_MS);
     }
 
     function submitMaxRows() {
