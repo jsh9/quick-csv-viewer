@@ -146,7 +146,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
           return;
         }
 
-        setShapeText('ready', message.shape, null);
+        if (viewState !== 'previewLoading') {
+          setShapeText('ready', message.shape, null);
+        }
         return;
       }
 
@@ -168,7 +170,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
           return;
         }
 
-        setShapeText('counting', null, progress);
+        if (viewState !== 'previewLoading') {
+          setShapeText('counting', null, progress);
+        }
         return;
       }
 
@@ -189,7 +193,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
           return;
         }
 
-        setShapeText('unavailable', null, null);
+        if (viewState !== 'previewLoading') {
+          setShapeText('unavailable', null, null);
+        }
         return;
       }
 
@@ -262,17 +268,20 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       }
 
       if (message.type === 'fullIndexReady') {
-        // The host builds this payload before it finishes reading headers, so
-        // a shape that arrived during indexing can be newer than payload.shape.
-        const indexingShape =
-          viewState === 'fullIndexing' && full && full.shapeState === 'ready' ? full.shape : null;
-        const payload =
-          message.payload.shape === null && indexingShape
-            ? { ...message.payload, shape: indexingShape }
-            : message.payload;
+        // Shape messages received while this load was indexing can be newer
+        // than payload.shape, so keep their state when the payload has none.
+        const indexingFull = viewState === 'fullIndexing' ? full : null;
         viewState = 'fullReady';
         cancelLoadRequested = false;
-        full = withShapeState(payload);
+        full = withShapeState(message.payload);
+        if (full.shape === null && indexingFull) {
+          if (indexingFull.shapeState === 'ready') {
+            full.shape = indexingFull.shape;
+            full.shapeState = 'ready';
+          } else if (indexingFull.shapeState === 'counting') {
+            full.shapeProgress = indexingFull.shapeProgress;
+          }
+        }
         previousReadyView = {
           type: 'full',
           payload: full

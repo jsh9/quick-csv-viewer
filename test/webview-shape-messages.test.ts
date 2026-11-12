@@ -175,3 +175,79 @@ test('shape messages after the index is ready still update the viewer', () => {
     assert.equal(text(harness, 'csv-shape'), 'Unavailable');
   });
 });
+
+test('fullIndexReady outside indexing does not reuse an older shape', () => {
+  withHarness((harness) => {
+    harness.send(indexStart(0));
+    harness.send(shapeMessage(1000));
+    harness.send(indexReady(0, 1000));
+    assert.equal(text(harness, 'csv-shape'), '1,000 rows x 3 columns');
+
+    // Only shapes received while this load was indexing may carry over.
+    harness.send(indexReady(0, 1000));
+    assert.equal(text(harness, 'csv-shape'), 'Counting...');
+  });
+});
+
+test('fullIndexReady keeps shape-scan progress received during indexing', () => {
+  withHarness((harness) => {
+    harness.send(indexStart(0));
+    harness.send({ type: 'shapeProgress', payload: { percent: 77 } });
+    harness.send(indexReady(0, 1000));
+
+    assert.equal(text(harness, 'csv-shape'), 'Counting 77.0%');
+  });
+});
+
+test('shape messages during preview loading leave the info bar alone', () => {
+  withHarness((harness) => {
+    harness.send({
+      type: 'previewLoadStart',
+      payload: { ...metadata(150), displayLimit: 150 }
+    });
+    harness.send({
+      type: 'previewLoadProgress',
+      payload: { loadedRowCount: 40, displayLimit: 150, percent: 26 }
+    });
+    assert.equal(text(harness, 'csv-shape'), 'Counting...');
+
+    harness.send(shapeMessage(1000));
+    assert.equal(text(harness, 'csv-shape'), 'Counting...');
+    harness.send({ type: 'shapeProgress', payload: { percent: 50 } });
+    assert.equal(text(harness, 'csv-shape'), 'Counting...');
+    harness.send({ type: 'shapeError', message: 'scan failed' });
+    assert.equal(text(harness, 'csv-shape'), 'Counting...');
+  });
+});
+
+test('a shape re-sent after a cancelled index updates the restored view', () => {
+  withHarness((harness) => {
+    harness.send({
+      type: 'data',
+      payload: {
+        ...metadata(20),
+        shape: null,
+        preview: {
+          headers: HEADERS,
+          headerFields: HEADERS,
+          rows: [{ rowNumber: 1, cells: ['1', 'Ada', 'Paris'] }],
+          loadedRowCount: 1,
+          displayLimit: 20,
+          columnCount: HEADERS.length,
+          indexedRecordCount: 2,
+          isComplete: false
+        }
+      }
+    });
+    harness.send({ type: 'loading' });
+    harness.send(indexStart(0));
+    harness.send(shapeMessage(1000));
+    harness.send({ type: 'restorePreviousView' });
+    assert.equal(text(harness, 'csv-shape'), 'Counting...');
+
+    // The host re-sends its cached shape right after restorePreviousView.
+    harness.send(shapeMessage(1000));
+    assert.equal(text(harness, 'csv-shape'), '1,000 rows x 3 columns');
+    assert.equal(text(harness, 'preview-status'), 'Showing 1 loaded rows');
+  });
+});
