@@ -156,23 +156,6 @@ export function texts(elements: Iterable<Element>): string[] {
   return Array.from(elements, (element) => element.textContent ?? '');
 }
 
-export function transposedHeader(harness: WebviewHarness): string[] {
-  return texts(
-    harness.document.querySelectorAll(
-      '.transposed-scroll .table-header .table-cell'
-    )
-  );
-}
-
-export function transposedBody(harness: WebviewHarness): string[][] {
-  return Array.from(
-    harness.document.querySelectorAll(
-      '.transposed-scroll .table-body .table-row'
-    ),
-    (row) => texts(row.children)
-  );
-}
-
 export function fetchRequests(
   harness: WebviewHarness,
   prefix: string

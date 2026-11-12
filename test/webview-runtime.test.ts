@@ -7,8 +7,6 @@ import {
   limitedDataMessage,
   rowsReply,
   texts,
-  transposedBody,
-  transposedHeader,
   type WebviewHarness
 } from './support/webview-dom';
 
@@ -18,6 +16,23 @@ const ROWS = [
   ['2', 'Bob', 'Lima'],
   ['3', 'Cy', 'Oslo']
 ];
+
+function transposedHeader(harness: WebviewHarness): string[] {
+  return texts(
+    harness.document.querySelectorAll(
+      '.transposed-scroll .table-header .table-cell'
+    )
+  );
+}
+
+function transposedBody(harness: WebviewHarness): string[][] {
+  return Array.from(
+    harness.document.querySelectorAll(
+      '.transposed-scroll .table-body .table-row'
+    ),
+    (row) => texts(row.children)
+  );
+}
 
 function withHarness(run: (harness: WebviewHarness) => void): void {
   const harness = createWebviewHarness();
