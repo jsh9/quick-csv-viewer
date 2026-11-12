@@ -1,12 +1,65 @@
 export function getControlsScript(): string {
   return /* js */ `    function setControlsDisabled(disabled) {
       quickViewButton.disabled = disabled;
+      transposedViewButton.disabled = disabled;
       rawContentsButton.disabled = disabled;
+      copyColumnNamesButton.disabled = disabled || getCurrentColumnNames().length === 0;
       rowsInput.disabled = disabled;
       wrapToggle.disabled = disabled;
       headerToggle.disabled = disabled;
-      quickViewButton.setAttribute('aria-pressed', 'true');
+      renderViewModeButtons();
+    }
+
+    function renderViewModeButtons() {
+      quickViewButton.setAttribute('aria-pressed', String(viewMode === 'table'));
+      transposedViewButton.setAttribute('aria-pressed', String(viewMode === 'transposed'));
       rawContentsButton.setAttribute('aria-pressed', 'false');
+    }
+
+    function setViewMode(mode) {
+      if (viewMode === mode) {
+        renderViewModeButtons();
+        return;
+      }
+
+      viewMode = mode;
+      renderViewModeButtons();
+      resetVirtualMeasurements();
+
+      if (viewState === 'limited' || viewState === 'limitedVirtual') {
+        renderLimited();
+        return;
+      }
+
+      if (viewState === 'fullReady') {
+        renderFullViewer();
+      }
+    }
+
+    function getCurrentColumnNames() {
+      const payload = getCurrentTablePayload();
+      if (!payload) {
+        return [];
+      }
+
+      return getHeaders(payload, getPayloadColumnCount(payload));
+    }
+
+    function showCopyColumnNamesFeedback(label) {
+      if (copyFeedbackTimer) {
+        clearTimeout(copyFeedbackTimer);
+      } else {
+        // Keep the toolbar from shifting while the shorter feedback label shows.
+        copyColumnNamesButton.style.minWidth =
+          String(Math.ceil(copyColumnNamesButton.getBoundingClientRect().width)) + 'px';
+      }
+
+      copyColumnNamesButton.textContent = label;
+      copyFeedbackTimer = setTimeout(() => {
+        copyFeedbackTimer = 0;
+        copyColumnNamesButton.textContent = COPY_COLUMN_NAMES_LABEL;
+        copyColumnNamesButton.style.minWidth = '';
+      }, COPY_FEEDBACK_MS);
     }
 
     function submitMaxRows() {

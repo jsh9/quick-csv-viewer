@@ -45,15 +45,19 @@ export function getTableScript(): string {
       element.append(createIndexCell(String(row.rowNumber), 'rowheader'));
       const cells = normalizeCells(row.cells, columnCount);
       for (const value of cells) {
-        const cell = document.createElement('div');
-        cell.className = 'table-cell';
-        cell.setAttribute('role', 'cell');
-        appendCellContent(cell, value);
-        cell.title = value;
-        element.append(cell);
+        element.append(createDataCell(value));
       }
 
       return element;
+    }
+
+    function createDataCell(value) {
+      const cell = document.createElement('div');
+      cell.className = 'table-cell';
+      cell.setAttribute('role', 'cell');
+      appendCellContent(cell, value);
+      cell.title = value;
+      return cell;
     }
 
     function createHeaderCell(label, columnIndex) {
@@ -221,7 +225,7 @@ export function getTableScript(): string {
       const columnCount = getPayloadColumnCount(payload);
       ensureColumnWidthState(columnCount);
       const columnWidths = getColumnWidths(payload, columnCount);
-      for (const scroll of document.querySelectorAll('.table-scroll')) {
+      for (const scroll of document.querySelectorAll('.table-scroll:not(.transposed-scroll)')) {
         applyColumnTemplate(scroll, columnWidths);
       }
     }

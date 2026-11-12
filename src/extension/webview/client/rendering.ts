@@ -87,6 +87,11 @@ export function getRenderingScript(): string {
       setControlsDisabled(false);
       renderLimitedInfo();
 
+      if (viewMode === 'transposed') {
+        renderTransposedLimited();
+        return;
+      }
+
       if (data.preview.rows.length >= LIMITED_VIRTUAL_THRESHOLD) {
         renderLimitedVirtualViewer();
         return;
@@ -149,10 +154,14 @@ export function getRenderingScript(): string {
       const loaded = data.preview.loadedRowCount;
       const limit = data.maxRows;
       if (loaded >= limit) {
-        previewStatus.textContent = 'Showing first ' + formatInteger(loaded) + ' rows';
+        setPreviewStatus('Showing first ' + formatInteger(loaded) + ' rows');
       } else {
-        previewStatus.textContent = 'Showing ' + formatInteger(loaded) + ' loaded rows';
+        setPreviewStatus('Showing ' + formatInteger(loaded) + ' loaded rows');
       }
+    }
+
+    function setPreviewStatus(message) {
+      previewStatus.textContent = message + getTransposedStatusSuffix();
     }
 
     function renderFullIndexing() {
@@ -259,6 +268,11 @@ export function getRenderingScript(): string {
       setControlsDisabled(false);
       renderFullInfo();
 
+      if (viewMode === 'transposed') {
+        renderTransposedFull();
+        return;
+      }
+
       const columnCount = getPayloadColumnCount(full);
       if (columnCount === 0) {
         content.replaceChildren(status('No rows loaded from this CSV file.'));
@@ -295,22 +309,23 @@ export function getRenderingScript(): string {
       modified.textContent = full.lastModified;
 
       if (full.maxRows === 0) {
-        previewStatus.textContent = 'Virtual full-file view';
+        setPreviewStatus('Virtual full-file view');
         return;
       }
 
       if (!full.shape) {
-        previewStatus.textContent = 'Showing first ' + formatInteger(full.totalRows) + ' rows';
+        setPreviewStatus('Showing first ' + formatInteger(full.totalRows) + ' rows');
         return;
       }
 
       if (full.totalRows >= full.shape.rowCount) {
-        previewStatus.textContent = 'Showing all ' + formatInteger(full.shape.rowCount) + ' rows';
+        setPreviewStatus('Showing all ' + formatInteger(full.shape.rowCount) + ' rows');
         return;
       }
 
-      previewStatus.textContent =
-        'Showing first ' + formatInteger(full.totalRows) + ' of ' + formatInteger(full.shape.rowCount) + ' rows';
+      setPreviewStatus(
+        'Showing first ' + formatInteger(full.totalRows) + ' of ' + formatInteger(full.shape.rowCount) + ' rows'
+      );
     }
 
     function withShapeState(payload) {

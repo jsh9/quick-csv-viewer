@@ -140,6 +140,15 @@ export function getWebviewStyles(): string {
       outline-offset: 2px;
     }
 
+    .secondary-button {
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      background: var(--vscode-button-secondaryBackground, transparent);
+    }
+
+    .secondary-button:hover:not(:disabled) {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+    }
+
     .mode-tabs {
       display: flex;
       align-items: center;
@@ -359,6 +368,30 @@ export function getWebviewStyles(): string {
 
     .table-row:nth-child(even) .index-cell {
       background: var(--vscode-editorGutter-background, var(--vscode-editor-background));
+    }
+
+    .field-cell {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      color: var(--vscode-editor-foreground);
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+      font-family: var(--vscode-font-family);
+      font-weight: 600;
+    }
+
+    .table-row:nth-child(even) .field-cell {
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+
+    .table-header .field-cell {
+      z-index: 3;
+    }
+
+    .table-header .row-number-cell {
+      color: var(--vscode-editorLineNumber-foreground);
+      font-family: var(--vscode-editor-font-family);
+      font-weight: 400;
     }
 
     .virtual-spacer {

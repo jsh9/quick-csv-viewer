@@ -64,6 +64,11 @@ export interface VscodeMock {
       listener: (document: { uri: FakeUri }) => void
     ): Disposable;
   };
+  readonly env: {
+    readonly clipboard: {
+      writeText(value: string): Promise<void>;
+    };
+  };
   readonly Uri: typeof FakeUri;
   readonly TabInputText: typeof FakeTabInputText;
   readonly TabInputCustom: typeof FakeTabInputCustom;
@@ -88,6 +93,8 @@ export interface VscodeMock {
     readonly saveListeners: Array<(document: { uri: FakeUri }) => void>;
     configurationReadError?: unknown;
     configurationUpdateError?: unknown;
+    clipboardText?: string;
+    clipboardWriteError?: unknown;
     executeCommandError?: unknown;
     provider?: RegisteredProvider;
   };
@@ -325,6 +332,17 @@ function createVscodeMock(): VscodeMock {
         });
       }
     },
+    env: {
+      clipboard: {
+        writeText: async (value) => {
+          if (state.clipboardWriteError !== undefined) {
+            throw state.clipboardWriteError;
+          }
+
+          state.clipboardText = value;
+        }
+      }
+    },
     Uri: FakeUri,
     TabInputText: FakeTabInputText,
     TabInputCustom: FakeTabInputCustom,
@@ -414,6 +432,7 @@ export function isMessage(value: unknown): value is {
   readonly requestId?: unknown;
   readonly message?: unknown;
   readonly value?: unknown;
+  readonly count?: unknown;
   readonly shape?: { readonly rowCount?: unknown };
   readonly payload?: {
     readonly maxRows?: unknown;

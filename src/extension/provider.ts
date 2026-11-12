@@ -21,7 +21,12 @@ import type {
   SuccessfulLoadState,
   WebviewMessage
 } from './types';
-import { clampMessageInteger, formatError } from './utils';
+import {
+  clampMessageInteger,
+  formatBulletedList,
+  formatError,
+  isStringArray
+} from './utils';
 import { getHtml } from './webview';
 
 class CsvDocument implements vscode.CustomDocument {
@@ -408,6 +413,24 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
         );
     };
 
+    const handleCopyColumnNames = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      if (!isStringArray(message.value)) {
+        await webviewPanel.webview.postMessage({
+          type: 'copyColumnNamesError',
+          message: 'Column names must be a list of text values.'
+        });
+        return;
+      }
+
+      await vscode.env.clipboard.writeText(formatBulletedList(message.value));
+      await webviewPanel.webview.postMessage({
+        type: 'columnNamesCopied',
+        count: message.value.length
+      });
+    };
+
     const handleCancelLoad = async (): Promise<void> => {
       const previousLoad =
         lastSuccessfulLoad &&
@@ -494,6 +517,16 @@ export class CsvViewerProvider implements vscode.CustomReadonlyEditorProvider<Cs
               });
             }
           );
+          return;
+        }
+
+        if (message.type === 'copyColumnNames') {
+          void handleCopyColumnNames(message).catch(async (error: unknown) => {
+            await webviewPanel.webview.postMessage({
+              type: 'copyColumnNamesError',
+              message: formatError(error)
+            });
+          });
           return;
         }
 

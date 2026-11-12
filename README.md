@@ -22,6 +22,10 @@ It is hosted both on VS Code marketplace and Open VSX:
 - **Readonly viewing**: prevent accidental changes to precious data files.
 - **Intuitive UI**: toggle cell wrapping, adjust column widths, and inspect CSV
   files in a clean table view.
+- **Transposed view**: flip rows and columns to read wide records field by
+  field.
+- **Copy column names**: copy every column name as a bulleted list in one
+  click.
 
 ## 2. Screenshots
 
@@ -81,14 +85,42 @@ Viewer does not send the whole file to the webview. It builds a byte-offset
 record index with progress, then the webview requests only the visible row range
 while scrolling. This keeps DOM size bounded for very large files.
 
-## 7. Raw Contents
+## 7. Transposed View
+
+`Transposed view` (next to `Quick view` and `View raw`) flips the table so each
+CSV column becomes a row and each CSV row becomes a column. Column names stay
+frozen on the left, and row indexes run across the frozen top row. When
+`quickCsvViewer.firstRowIsHeader` is enabled, the top-left cell shows `0`, the
+index of the header row.
+
+The transposed view shows up to the first 100 rows of the current view. When
+more rows are available, the info bar says so. Switch back with `Quick view`.
+The selected view stays active when you change settings or the file reloads.
+
+## 8. Copy Column Names
+
+`Copy column names` copies all column names to the clipboard as a bulleted
+list, one `•` line per column:
+
+```text
+• id
+• name
+• email
+```
+
+The list matches the column labels shown in the viewer. When
+`quickCsvViewer.firstRowIsHeader` is disabled, that means the generated
+`Column 1`, `Column 2`, ... labels. Line breaks inside a column name become
+spaces so each column stays on one line.
+
+## 9. Raw Contents
 
 `View raw` opens the file in VS Code's default text editor. The extension's top
 info bar is not available there, but you can return to the viewer with
 `Open in Quick CSV Viewer` from the editor title, Explorer context menu, or
 command palette.
 
-## 8. Notes for Developers
+## 10. Notes for Developers
 
 ```sh
 npm install

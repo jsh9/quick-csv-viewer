@@ -2,6 +2,13 @@
 
 All notable changes to Quick CSV Viewer are documented in this file.
 
+## 0.0.4
+
+- Add a `Transposed view` mode next to `Quick view` and `View raw` that shows
+  CSV columns as rows, with frozen column names on the left.
+- Add a `Copy column names` button that copies all column names to the
+  clipboard as a bulleted list.
+
 ## 0.0.3
 
 - Keep CSV diffs in VS Code's native diff editor while continuing to open CSV

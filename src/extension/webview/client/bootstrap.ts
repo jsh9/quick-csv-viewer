@@ -2,7 +2,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
   return /* js */ `    const vscode = acquireVsCodeApi();
     const content = document.getElementById('content');
     const quickViewButton = document.getElementById('quick-view');
+    const transposedViewButton = document.getElementById('transposed-view');
     const rawContentsButton = document.getElementById('raw-contents');
+    const copyColumnNamesButton = document.getElementById('copy-column-names');
     const fileSize = document.getElementById('file-size');
     const csvShape = document.getElementById('csv-shape');
     const rowsInput = document.getElementById('rows-input');
@@ -25,6 +27,9 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
     const COLUMN_WIDTH_PADDING_PX = 24;
     const MIN_MANUAL_COLUMN_WIDTH = 48;
     const MAX_MANUAL_COLUMN_WIDTH = 900;
+    const TRANSPOSED_MAX_ROWS = 100;
+    const COPY_COLUMN_NAMES_LABEL = 'Copy column names';
+    const COPY_FEEDBACK_MS = 1500;
 
     let viewState = 'loading';
     let data = null;
@@ -48,12 +53,32 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
     let manualColumnWidths = new Map();
     let columnWidthCount = 0;
     let activeColumnResize = null;
+    let viewMode = 'table';
+    let transposedRows = null;
+    let transposedRowsSource = null;
+    let pendingTransposedRequest = null;
+    let copyFeedbackTimer = 0;
 
     content.focus({ preventScroll: true });
 
     quickViewButton.addEventListener('click', () => {
-      quickViewButton.setAttribute('aria-pressed', 'true');
-      rawContentsButton.setAttribute('aria-pressed', 'false');
+      setViewMode('table');
+    });
+
+    transposedViewButton.addEventListener('click', () => {
+      setViewMode('transposed');
+    });
+
+    copyColumnNamesButton.addEventListener('click', () => {
+      const columnNames = getCurrentColumnNames();
+      if (columnNames.length === 0) {
+        return;
+      }
+
+      vscode.postMessage({
+        type: 'copyColumnNames',
+        value: columnNames
+      });
     });
 
     rawContentsButton.addEventListener('click', () => {
@@ -273,11 +298,31 @@ export function getBootstrapScript(indexedPreviewRowThreshold: number): string {
       }
 
       if (message.type === 'rows') {
-        if (message.requestId !== pendingRequestId || viewState !== 'fullReady') {
+        if (viewState !== 'fullReady') {
+          return;
+        }
+
+        if (pendingTransposedRequest && message.requestId === pendingTransposedRequest.requestId) {
+          receiveTransposedRows(message.payload.rows);
+          return;
+        }
+
+        if (message.requestId !== pendingRequestId) {
           return;
         }
 
         renderVirtualRows(message.payload.start, message.payload.rows, message.payload.totalRows);
+        return;
+      }
+
+      if (message.type === 'columnNamesCopied') {
+        showCopyColumnNamesFeedback('Copied!');
+        return;
+      }
+
+      if (message.type === 'copyColumnNamesError') {
+        showCopyColumnNamesFeedback('Copy failed');
+        previewStatus.textContent = message.message || 'Unable to copy column names.';
         return;
       }
 

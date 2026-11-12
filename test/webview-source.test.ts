@@ -20,6 +20,7 @@ async function readExtensionSource(): Promise<string> {
     ['src', 'extension', 'webview', 'client', 'bootstrap.ts'],
     ['src', 'extension', 'webview', 'client', 'rendering.ts'],
     ['src', 'extension', 'webview', 'client', 'table.ts'],
+    ['src', 'extension', 'webview', 'client', 'transposed.ts'],
     ['src', 'extension', 'webview', 'client', 'virtualization.ts'],
     ['src', 'extension', 'webview', 'client', 'controls.ts'],
     ['src', 'extension', 'webview', 'client', 'script.ts']
@@ -80,6 +81,147 @@ test('webview exposes Quick view and View raw controls', async () => {
   );
   assert.match(source, /vscode\.postMessage\(\{ type: 'rawContents' \}\);/);
   assert.match(source, /'vscode\.openWith',\s*document\.uri,\s*'default'/);
+});
+
+test('webview places Transposed view between Quick view and View raw', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /id="quick-view"[^\n]*\n\s*<button class="mode-button" type="button" id="transposed-view" aria-pressed="false">Transposed view<\/button>\n\s*<button[^\n]*id="raw-contents"/
+  );
+  assert.match(
+    source,
+    /transposedViewButton\.addEventListener\('click', \(\) => \{\s*setViewMode\('transposed'\);/
+  );
+  assert.match(
+    source,
+    /quickViewButton\.addEventListener\('click', \(\) => \{\s*setViewMode\('table'\);/
+  );
+  assert.match(
+    source,
+    /function renderViewModeButtons\(\) \{[\s\S]*?quickViewButton\.setAttribute\('aria-pressed', String\(viewMode === 'table'\)\);[\s\S]*?transposedViewButton\.setAttribute\('aria-pressed', String\(viewMode === 'transposed'\)\);/
+  );
+  assert.match(
+    source,
+    /function setControlsDisabled\(disabled\) \{[\s\S]*?transposedViewButton\.disabled = disabled;[\s\S]*?renderViewModeButtons\(\);/
+  );
+});
+
+test('view mode survives reloads and rerenders the current ready view', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /let viewMode = 'table';/);
+  assert.match(
+    source,
+    /function setViewMode\(mode\) \{[\s\S]*?viewMode = mode;[\s\S]*?resetVirtualMeasurements\(\);[\s\S]*?renderLimited\(\);[\s\S]*?renderFullViewer\(\);/
+  );
+  assert.match(
+    source,
+    /renderLimitedInfo\(\);\s*if \(viewMode === 'transposed'\) \{\s*renderTransposedLimited\(\);\s*return;\s*\}\s*if \(data\.preview\.rows\.length >= LIMITED_VIRTUAL_THRESHOLD\)/
+  );
+  assert.match(
+    source,
+    /renderFullInfo\(\);\s*if \(viewMode === 'transposed'\) \{\s*renderTransposedFull\(\);\s*return;\s*\}/
+  );
+});
+
+test('transposed view renders CSV columns as rows with a frozen field column', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /const TRANSPOSED_MAX_ROWS = 100;/);
+  assert.match(
+    source,
+    /renderTransposedTable\(data, data\.preview\.rows\.slice\(0, TRANSPOSED_MAX_ROWS\), columnCount\);/
+  );
+  assert.match(
+    source,
+    /const cornerLabel = payload\.firstRowIsHeader \? '0' : '';/
+  );
+  assert.match(
+    source,
+    /header\.append\(createTransposedRowNumberCell\(String\(row\.rowNumber\), false\)\);/
+  );
+  assert.match(
+    source,
+    /for \(const \[columnIndex, label\] of headers\.entries\(\)\) \{[\s\S]*?element\.append\(createFieldCell\(label\)\);[\s\S]*?element\.append\(createDataCell\(cells\[columnIndex\]\)\);/
+  );
+  assert.match(
+    source,
+    /\.field-cell \{[\s\S]*?position: sticky;[\s\S]*?left: 0;[\s\S]*?z-index: 1;/
+  );
+  assert.match(source, /\.table-header \.field-cell \{[\s\S]*?z-index: 3;/);
+  assert.match(
+    source,
+    /querySelectorAll\('\.table-scroll:not\(\.transposed-scroll\)'\)/
+  );
+});
+
+test('indexed transposed view fetches leading rows with its own request id', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /function requestTransposedRows\(\) \{[\s\S]*?const requestId = 'transposed-' \+ String\(\+\+latestRequestId\);[\s\S]*?pendingTransposedRequest = \{[\s\S]*?source: full[\s\S]*?type: 'fetchRows',[\s\S]*?start: 0,[\s\S]*?count: Math\.min\(full\.totalRows, TRANSPOSED_MAX_ROWS\)/
+  );
+  assert.match(
+    source,
+    /if \(pendingTransposedRequest && message\.requestId === pendingTransposedRequest\.requestId\) \{\s*receiveTransposedRows\(message\.payload\.rows\);/
+  );
+  assert.match(
+    source,
+    /function receiveTransposedRows\(rows\) \{[\s\S]*?if \(request\.source !== full\) \{[\s\S]*?transposedRows = rows;[\s\S]*?transposedRowsSource = full;/
+  );
+  assert.match(
+    source,
+    /if \(transposedRows && transposedRowsSource === full\) \{\s*renderTransposedTable\(full, transposedRows, columnCount\);/
+  );
+  assert.match(
+    source,
+    /function renderTransposedFull\(\) \{\s*clearVirtualViewport\(\);/
+  );
+  assert.match(
+    source,
+    /function setPreviewStatus\(message\) \{\s*previewStatus\.textContent = message \+ getTransposedStatusSuffix\(\);/
+  );
+  assert.match(source, /'; transposed view shows first '/);
+});
+
+test('copy column names button posts the displayed column labels', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /<button class="secondary-button" type="button" id="copy-column-names" title="Copy all column names as a bulleted list">Copy column names<\/button>\s*<div class="mode-tabs"/
+  );
+  assert.match(
+    source,
+    /copyColumnNamesButton\.addEventListener\('click', \(\) => \{[\s\S]*?const columnNames = getCurrentColumnNames\(\);[\s\S]*?type: 'copyColumnNames',\s*value: columnNames/
+  );
+  assert.match(
+    source,
+    /function getCurrentColumnNames\(\) \{[\s\S]*?return getHeaders\(payload, getPayloadColumnCount\(payload\)\);/
+  );
+  assert.match(
+    source,
+    /copyColumnNamesButton\.disabled = disabled \|\| getCurrentColumnNames\(\)\.length === 0;/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'columnNamesCopied'\) \{\s*showCopyColumnNamesFeedback\('Copied!'\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'copyColumnNamesError'\) \{\s*showCopyColumnNamesFeedback\('Copy failed'\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'copyColumnNames'\) \{\s*void handleCopyColumnNames\(message\)/
+  );
+  assert.match(
+    source,
+    /await vscode\.env\.clipboard\.writeText\(formatBulletedList\(message\.value\)\);/
+  );
 });
 
 test('rows input rejects empty values before posting maxRows updates', async () => {
