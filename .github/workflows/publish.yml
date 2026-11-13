@@ -1,10 +1,12 @@
 name: Publish
 
 # Publishes the extension to the Visual Studio Marketplace and Open VSX when a
-# version tag such as `0.0.4` is pushed. Both registries use trusted publishing
-# (GitHub OIDC), so no publishing token is stored in this repository. The
-# registries only accept tokens from this workflow file in jsh9/quick-csv-viewer;
-# see "Releasing" in README.md for the one-time registry setup.
+# version tag such as `0.0.4` is pushed, then creates the GitHub release for the
+# tag with the CHANGELOG.md section as notes and the .vsix attached. Both
+# registries use trusted publishing (GitHub OIDC), so no publishing token is
+# stored in this repository. The registries only accept tokens from this
+# workflow file in jsh9/quick-csv-viewer; see "Releasing" in README.md for the
+# one-time registry setup.
 
 on:
   push:
@@ -22,10 +24,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # write: create the GitHub release and attach the .vsix to it.
+      contents: write
       id-token: write
     env:
       HUSKY: 0
+      VSIX: quick-csv-viewer-${{ github.ref_name }}.vsix
 
     steps:
       - name: Check out repository
@@ -46,6 +50,11 @@ jobs:
             exit 1
           fi
 
+      # Fails before anything is published when CHANGELOG.md has no section for
+      # this version.
+      - name: Extract release notes from CHANGELOG.md
+        run: node scripts/release-notes.cjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Install dependencies
         run: npm ci
 
@@ -53,18 +62,34 @@ jobs:
         run: npm test
 
       - name: Package the extension
-        run: npx --yes @vscode/vsce@4.1.0 package --out quick-csv-viewer.vsix
+        run: npx --yes @vscode/vsce@4.1.0 package --out "$VSIX"
 
       - name: Keep the package with this run
         uses: actions/upload-artifact@v6
         with:
           name: quick-csv-viewer-${{ github.ref_name }}
-          path: quick-csv-viewer.vsix
+          path: ${{ env.VSIX }}
 
       # --skip-duplicate makes a re-run safe after one registry has already
       # accepted this version.
       - name: Publish to the Visual Studio Marketplace
-        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --skip-duplicate --packagePath quick-csv-viewer.vsix
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --skip-duplicate --packagePath "$VSIX"
 
       - name: Publish to Open VSX
-        run: npx --yes ovsx@1.3.0 publish quick-csv-viewer.vsix --trusted-publishing --skip-duplicate
+        run: npx --yes ovsx@1.3.0 publish "$VSIX" --trusted-publishing --skip-duplicate
+
+      # Runs only after both registries accepted the version. A release that
+      # already exists for the tag (for example one drafted by hand) keeps its
+      # notes and only gets the .vsix attached, so a re-run is safe too.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$VSIX" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$VSIX" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" \
+              --verify-tag
+          fi
