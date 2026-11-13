@@ -150,6 +150,11 @@ cannot use the DOM types that the jsdom test helpers bring in.
 jsdom with a stubbed VS Code API, so webview behavior is tested by driving it
 with host messages.
 
+`.vscodeignore` is an allowlist: it excludes everything, then adds back only
+the files the published extension needs. If the extension starts to need a new
+file at runtime, add it there. Check the package contents with
+`npx @vscode/vsce ls` before publishing.
+
 Use VS Code's extension host launch flow to test the viewer manually with the
 small and large files in `sample-data/`.
 

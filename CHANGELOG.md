@@ -15,6 +15,9 @@ All notable changes to Quick CSV Viewer are documented in this file.
   the row index is still building, and the row and column counts staying on
   "Counting..." after cancelling such a load.
 - Refresh the README screenshots with a light theme.
+- Package only the files the extension needs. The `.vsix` no longer includes
+  compiled tests, coverage output, or local settings such as `.claude/`, and
+  shrinks from about 2 MB to about 450 KB.
 
 ## 0.0.3
 
