@@ -167,3 +167,37 @@ For a faster smoke test, lower the target size of each large file:
 ```sh
 QUICK_CSV_BIG_SIZE_MB=5 python3 sample-data/generate_large_csv.py
 ```
+
+### Releasing
+
+Pushing a version tag publishes the extension to the Visual Studio Marketplace
+and Open VSX through `.github/workflows/publish.yml`:
+
+1. In a pull request, bump `version` in `package.json` and `package-lock.json`
+   and add the matching `CHANGELOG.md` entry. Merge it.
+2. Tag the merge commit with the bare version, matching the earlier tags:
+
+   ```sh
+   git tag 0.0.4
+   git push origin 0.0.4
+   ```
+
+The workflow checks that the tag equals the `package.json` version, runs
+`npm test`, packages the `.vsix` once, keeps it as a workflow artifact, and
+publishes that file to both registries. Both publish steps use
+`--skip-duplicate`, so re-running a failed run is safe.
+
+Both registries use trusted publishing (GitHub OIDC), so no token is stored in
+the repository. One-time setup:
+
+- Visual Studio Marketplace: on the publisher management page, open the `jsh9`
+  publisher, select **Trusted Publishing**, and create a policy with repository
+  owner `jsh9`, repository `quick-csv-viewer`, workflow `publish.yml`, and no
+  environment.
+- Open VSX: at <https://open-vsx.org/user-settings/trusted-publishers>,
+  register `jsh9/quick-csv-viewer` with workflow `publish.yml` for the `jsh9`
+  namespace.
+
+To publish by hand instead, run `npx @vscode/vsce package`, upload the `.vsix`
+on the Marketplace publisher page, and run
+`npx ovsx publish <file>.vsix -p <token>` with an Open VSX access token.
