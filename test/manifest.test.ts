@@ -229,3 +229,30 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   assert.match(workflow, /npm test/);
   assert.match(workflow, /xvfb-run -a npm run test:vscode/);
 });
+
+test('vscodeignore packages only an allowlist of runtime and marketplace files', async () => {
+  const rules = (
+    await fs.readFile(path.join(process.cwd(), '.vscodeignore'), 'utf8')
+  )
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(process.cwd(), 'package.json'), 'utf8')
+  ) as { readonly icon?: unknown; readonly main?: unknown };
+
+  // Everything is excluded first, so tests, coverage output and local tool
+  // settings (such as .claude/ or .env) can never reach the .vsix.
+  assert.equal(rules[0], '**');
+  assert.deepEqual(rules.slice(1).sort(), [
+    '!CHANGELOG.md',
+    '!LICENSE',
+    '!README.md',
+    '!images/icon.png',
+    '!images/screenshots/**',
+    '!out/src/**',
+    '!package.json'
+  ]);
+  assert.equal(`!${String(packageJson.icon)}`, '!images/icon.png');
+  assert.match(String(packageJson.main), /^\.\/out\/src\//);
+});

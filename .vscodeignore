@@ -1,16 +1,12 @@
-.vscode/**
-.github/**
-.husky/**
-.githooks/**
-sample-data/**
-scripts/**
-src/**
-test/**
-test-vscode/**
-node_modules/**
-.vscode-test.cjs
-.vscode-test/**
-images/icon-source.png
-*.vsix
-*.tsbuildinfo
-.DS_Store
+# Allowlist: exclude everything, then add back only what the published
+# extension needs. Local files (tests, coverage, editor or agent settings,
+# env files) then cannot end up in the .vsix by accident. Add new runtime
+# files here when the extension starts to need them.
+**
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+!out/src/**
+!images/icon.png
+!images/screenshots/**
