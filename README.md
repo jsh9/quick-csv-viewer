@@ -176,10 +176,11 @@ QUICK_CSV_BIG_SIZE_MB=5 python3 sample-data/generate_large_csv.py
 ### Releasing
 
 Pushing a version tag publishes the extension to the Visual Studio Marketplace
-and Open VSX through `.github/workflows/publish.yml`:
+and Open VSX and creates the GitHub release, through
+`.github/workflows/publish.yml`:
 
 1. In a pull request, bump `version` in `package.json` and `package-lock.json`
-   and add the matching `CHANGELOG.md` entry. Merge it.
+   and add the matching `## <version>` section to `CHANGELOG.md`. Merge it.
 2. Tag the merge commit with the bare version, matching the earlier tags:
 
    ```sh
@@ -187,10 +188,14 @@ and Open VSX through `.github/workflows/publish.yml`:
    git push origin 0.0.4
    ```
 
-The workflow checks that the tag equals the `package.json` version, runs
-`npm test`, packages the `.vsix` once, keeps it as a workflow artifact, and
-publishes that file to both registries. Both publish steps use
-`--skip-duplicate`, so re-running a failed run is safe.
+The workflow checks that the tag equals the `package.json` version and that
+`CHANGELOG.md` has a section for it, runs `npm test`, packages the `.vsix` once,
+keeps it as a workflow artifact, and publishes that file to both registries.
+Once both accept it, the workflow creates the GitHub release for the tag, with
+the `CHANGELOG.md` section as its notes (`scripts/release-notes.cjs` extracts
+it) and the `.vsix` attached. If a release for the tag already exists, it keeps
+its notes and only gets the `.vsix`. Both publish steps use `--skip-duplicate`,
+so re-running a failed run is safe.
 
 Both registries use trusted publishing (GitHub OIDC), so no token is stored in
 the repository. One-time setup:
